@@ -18,12 +18,11 @@ It is not derived from Linux or XNU.
   immutable and execute-only memory, `MAP_CONCEAL`, W^X and NX, ASLR and KASLR, KARL relinking at each boot,
   RETGUARD and stack protectors; the traditional user, group and file permissions, privilege separation, a packet
   filter, and the separation of user and kernel memory.
-- **Signing:** Secure Boot is optional and uses keys that Progmasoft manages. Anyone may sign a kernel module.
+- **Module signing:** anyone may sign a kernel module.
 
 It is written in GNU99 under the
 [Progmasoft Core C Coding Guidelines](https://github.com/Progmasoft/progmasoft-cpp) and built with
-[OpenKBuild](https://github.com/Progmasoft/openkbuild). [OpenTalaLoader](https://github.com/Progmasoft/opentalaloader)
-boots it.
+[OpenKBuild](https://github.com/Progmasoft/openkbuild).
 
 No code is written yet.
 
