@@ -12,8 +12,8 @@ It is not derived from Linux or XNU.
   `.tbd` and `.plist`.
 - **Drivers:** IOKit and DriverKit, written in GNU99 and shaped by Progmasoft's own tools; they are not the same as
   XNU's.
-- **Security:** security modules are built into the kernel (OTSEM), and loading unsigned kernel modules goes through
-  OTMOG. The kernel gives seccomp-BPF, Landlock, Kernel Lockdown, IMA/EVM, an eBPF verifier, Yama, `pledge(2)`,
+- **Security:** OTSEM, the OpenTala Security Modules, builds security modules into the kernel, and OTMOG, the
+  OpenTala Module Gate, decides how unsigned kernel modules are loaded. The kernel gives seccomp-BPF, Landlock, Kernel Lockdown, IMA/EVM, an eBPF verifier, Yama, `pledge(2)`,
   `unveil(2)`, `pinsyscalls(2)`, Capsicum, Veriexec, securelevels, security event auditing and RCTL resource limits;
   immutable and execute-only memory, `MAP_CONCEAL`, W^X and NX, ASLR and KASLR, KARL relinking at each boot,
   RETGUARD and stack protectors; the traditional user, group and file permissions, privilege separation, a packet
