@@ -7,6 +7,11 @@ OpenTala is the kernel of TalaOS: an independent kernel with a hybrid architectu
 It is not derived from Linux or XNU.
 
 - **Unix and POSIX compatibility** comes first.
+- **Mach:** the Mach layer is OpenTala's own, written for it rather than taken from XNU's osfmk or another Mach:
+  tasks and threads, ports and messages, Mach IPC, and port rights (receive, send and send-once) that a task holds in
+  its port name space and passes to another in a message. A name whose port is gone becomes a dead name and is not
+  reused, so a task never mistakes a new port for an old one; a port set lets a task wait on many receive rights in
+  one call.
 - **ABI and formats:** the native ABI is Darwin's (C++ uses the Itanium ABI), and objects and executables are Mach-O.
   `long double` is the x87 80-bit extended format on amd64 and IEEE 754 binary64 on aarch64.
   The usual extensions are kept: `.dylib`, `.so`, `.a`, `.framework`, `.bundle`, `.kext`, `.systemextension`, `.xpc`,
