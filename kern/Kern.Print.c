@@ -168,6 +168,55 @@ ReadSpec(const char* aIn_pFormat, Spec* aOut_pSpec)
 }
 
 /**
+ * @brief Writes the next argument as a signed decimal number.
+ *
+ * @param[in]     aIn_pSpec   The flags, width and length.
+ * @param[in,out] aIn_pValues The arguments.
+ */
+static void
+WriteSigned(const Spec* aIn_pSpec, va_list* aIn_pValues)
+{
+        const long long          value     = NextSigned(aIn_pSpec->length, aIn_pValues);
+        const unsigned long long magnitude = value < 0 ? 0ULL - (unsigned long long) value
+                                                       : (unsigned long long) value;
+
+        WriteNumber(aIn_pSpec, magnitude, 10, value < 0);
+}
+
+/**
+ * @brief Writes the next argument as a string, "(null)" for a null pointer.
+ *
+ * @param[in]     aIn_pSpec   The width.
+ * @param[in,out] aIn_pValues The arguments.
+ */
+static void
+WriteString(const Spec* aIn_pSpec, va_list* aIn_pValues)
+{
+        const char* pText  = va_arg(*aIn_pValues, const char*);
+        int         length = 0;
+
+        if(pText == 0)
+                pText = "(null)";
+        while(pText[ length ] != '\0')
+                length++;
+        WritePadded(aIn_pSpec, pText, length, false);
+}
+
+/**
+ * @brief Writes the next argument as a pointer: 0x and sixteen hexadecimal digits.
+ *
+ * @param[in,out] aIn_pValues The arguments.
+ */
+static void
+WritePointer(va_list* aIn_pValues)
+{
+        const Spec pointer = { true, 16, kLengthLong };
+
+        WriteBytes("0x", 2);
+        WriteNumber(&pointer, (uintptr_t) va_arg(*aIn_pValues, void*), 16, false);
+}
+
+/**
  * @brief Writes one conversion.
  *
  * @param[in]     aIn_pSpec   Its flags, width and length.
@@ -181,47 +230,26 @@ WriteConversion(const Spec* aIn_pSpec, char aConversion, va_list* aIn_pValues)
         switch(aConversion)
         {
         case 'd':
-        {
-                const long long value = NextSigned(aIn_pSpec->length, aIn_pValues);
-
-                WriteNumber(aIn_pSpec,
-                            value < 0 ? 0ULL - (unsigned long long) value
-                                      : (unsigned long long) value,
-                            10,
-                            value < 0);
+                WriteSigned(aIn_pSpec, aIn_pValues);
                 return (true);
-        }
         case 'u':
-                WriteNumber(aIn_pSpec, NextUnsigned(aIn_pSpec->length, aIn_pValues), 10, false);
-                return (true);
         case 'x':
-                WriteNumber(aIn_pSpec, NextUnsigned(aIn_pSpec->length, aIn_pValues), 16, false);
+                WriteNumber(aIn_pSpec,
+                            NextUnsigned(aIn_pSpec->length, aIn_pValues),
+                            aConversion == 'x' ? 16 : 10,
+                            false);
                 return (true);
         case 'p':
-        {
-                const Spec pointer = { true, 16, kLengthLong };
-
-                WriteBytes("0x", 2);
-                WriteNumber(&pointer, (uintptr_t) va_arg(*aIn_pValues, void*), 16, false);
+                WritePointer(aIn_pValues);
                 return (true);
-        }
+        case 's':
+                WriteString(aIn_pSpec, aIn_pValues);
+                return (true);
         case 'c':
         {
                 const char character = (char) va_arg(*aIn_pValues, int);
 
                 WritePadded(aIn_pSpec, &character, 1, false);
-                return (true);
-        }
-        case 's':
-        {
-                const char* pText  = va_arg(*aIn_pValues, const char*);
-                int         length = 0;
-
-                if(pText == 0)
-                        pText = "(null)";
-                while(pText[ length ] != '\0')
-                        length++;
-                WritePadded(aIn_pSpec, pText, length, false);
                 return (true);
         }
         case '%':

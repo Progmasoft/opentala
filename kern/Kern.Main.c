@@ -130,28 +130,41 @@ ReadMemoryMap(const Amd64_Multiboot_Information* aIn_pInformation)
 }
 
 /**
+ * @brief Panics unless frame aIn_pFrames[ aIndex ] is one the allocator may give: aligned, above
+ * the first MiB, outside the kernel image, and none of the frames before it.
+ *
+ * @param[in] aIn_pFrames The frames allocated so far.
+ * @param[in] aIndex      The one to check.
+ */
+static void
+CheckAllocatedFrame(const uint64_t* aIn_pFrames, unsigned aIndex)
+{
+        const uint64_t frame      = aIn_pFrames[ aIndex ];
+        const uint64_t imageStart = (uintptr_t) gKern_ImageStart;
+        const uint64_t imageEnd   = (uintptr_t) gKern_ImageEnd;
+        const bool     isInImage  = frame + KERN_PAGE_FRAMES_SIZE > imageStart && frame < imageEnd;
+
+        if(frame % KERN_PAGE_FRAMES_SIZE != 0 || frame < 0x100000 || isInImage)
+                Kern_Panic("the allocator gave %p, which it holds back", (void*) frame);
+        for(unsigned earlier = 0; earlier < aIndex; earlier++)
+                if(aIn_pFrames[ earlier ] == frame)
+                        Kern_Panic("the allocator gave %p twice", (void*) frame);
+}
+
+/**
  * @brief Takes three frames and gives them back, and checks what the allocator answers.
  */
 static void
 CheckPageFrames(void)
 {
-        const uint64_t imageStart = (uintptr_t) gKern_ImageStart;
-        const uint64_t imageEnd   = (uintptr_t) gKern_ImageEnd;
-        const uint64_t before     = Kern_PageFrames_FreeCount();
+        const uint64_t before = Kern_PageFrames_FreeCount();
         uint64_t       frames[ 3 ];
 
         for(unsigned index = 0; index < 3; index++)
         {
                 if(!Kern_PageFrames_Allocate(&frames[ index ]))
                         Kern_Panic("no page frame is free");
-                const uint64_t frame = frames[ index ];
-
-                if(frame % KERN_PAGE_FRAMES_SIZE != 0 || frame < 0x100000
-                   || (frame + KERN_PAGE_FRAMES_SIZE > imageStart && frame < imageEnd))
-                        Kern_Panic("the allocator gave %p, which it holds back", (void*) frame);
-                for(unsigned earlier = 0; earlier < index; earlier++)
-                        if(frames[ earlier ] == frame)
-                                Kern_Panic("the allocator gave %p twice", (void*) frame);
+                CheckAllocatedFrame(frames, index);
         }
         if(Kern_PageFrames_FreeCount() != before - 3)
                 Kern_Panic("three allocations took %lu frames",

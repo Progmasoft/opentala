@@ -45,4 +45,4 @@ where the last one stopped; freeing a frame that is not in use panics, since it 
 ## Console
 
 `Kern.Print.c` has `Kern_Print`, a small printf (`%s %c %d %u %x %p`, `l` and `ll`, width and `0`) on the serial port,
-and `Kern_Panic`, which writes `panic: ` and its message and stops the processor.
+and `Kern_Panic`, which writes `panic:`, a space and its message, and stops the processor.
