@@ -32,14 +32,30 @@ It is written in GNU99 under the
 
 ## What it does
 
-The kernel boots on amd64 in QEMU: it enters through Multiboot in 32-bit mode, maps the first GiB, switches to
-64-bit mode, writes three lines to the first serial port and halts.
+The kernel boots on amd64 in QEMU: it enters through Multiboot in 32-bit mode, maps the first GiB and switches to
+64-bit mode. Then it
+
+- loads its own GDT, a task state segment and an IDT of the 32 exceptions and 16 legacy IRQs; the double fault,
+  the NMI and the machine check run on stacks of their own, so a fault on a broken stack is still reported;
+- takes a breakpoint and goes on after it;
+- reads the loader's memory map into a page frame allocator, with the first MiB, the kernel and the loader's
+  structures held back, and checks it;
+- starts the timer at 100 Hz through the PIC and the PIT, waits for ten ticks,
+
+and halts. A fault it does not expect writes the registers and ends in a panic that names it.
 
 ```text
 OpenTala: amd64, 64-bit mode
 OpenTala: loaded by Multiboot
+traps: breakpoint handled and resumed
+memory: 127 MiB usable, 32447 page frames free below 1 GiB
+memory: allocator checked
+timer: 10 ticks at 100 Hz
 OpenTala: halting
 ```
+
+`opentala.test=page-fault` on the command line (`-append` in QEMU) writes to an unmapped address and
+`opentala.test=double-fault` pushes to an unmapped stack; `bmake test` boots all three ways.
 
 The kernel is a Mach-O executable whose `__TEXT` segment starts at 1 MiB. Its Multiboot header gives the load
 addresses itself, so a Multiboot loader copies the file without reading Mach-O.

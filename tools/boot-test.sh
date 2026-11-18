@@ -4,8 +4,18 @@
 #
 # Usage: boot-test.sh <kernel>
 #
-# Checks that the Mach-O layout of <kernel> can be loaded flat, boots it in QEMU and waits up to
-# 30 seconds for the lines it must write to the serial port.
+# Checks that the Mach-O layout of <kernel> can be loaded flat, then boots it in QEMU three
+# times, with 128 MiB, and checks what it writes to the serial port:
+#
+#   - without a command line: traps, the memory map, the page frame allocator and the timer
+#     work, and the kernel halts;
+#   - with opentala.test=page-fault: a write to an unmapped address ends in a panic that names
+#     the page fault and its address;
+#   - with opentala.test=double-fault: a push to an unmapped stack ends in a panic that names the
+#     double fault, which only its own stack (the IST) can report.
+#
+# Each expected line is an extended regular expression that must match one line of the output,
+# in order.
 
 set -eu
 
@@ -37,28 +47,70 @@ serial=$(mktemp)
 log=$(mktemp)
 pid=
 trap 'rm -f "$serial" "$log"; [ -z "$pid" ] || kill "$pid" 2>/dev/null || true' EXIT
-"$qemu" -kernel "$kernel" -serial "file:$serial" -display none -no-reboot -monitor none \
-        2>"$log" &
-pid=$!
 
-expected="OpenTala: amd64, 64-bit mode
-OpenTala: loaded by Multiboot
-OpenTala: halting"
+# boot <name> <command line> <last line> <expected lines>
+boot() {
+        name=$1
+        line=$2
+        last=$3
+        expected=$4
+        : >"$serial"
+        "$qemu" -kernel "$kernel" -append "$line" -m 128 -serial "file:$serial" -display none \
+                -no-reboot -monitor none 2>"$log" &
+        pid=$!
+        for _ in $(seq 1 60); do
+                if grep -Eq "$last" "$serial" || ! kill -0 "$pid" 2>/dev/null; then
+                        break
+                fi
+                sleep 0.5
+        done
+        kill "$pid" 2>/dev/null || true
+        wait "$pid" 2>/dev/null || true
+        pid=
 
-for _ in $(seq 1 60); do
-        if grep -q "OpenTala: halting" "$serial" || ! kill -0 "$pid" 2>/dev/null; then
-                break
+        actual=$(tr -d '\r' <"$serial")
+        remaining=$actual
+        missing=
+        while IFS= read -r pattern; do
+                [ -n "$pattern" ] || continue
+                # The first line from here on that matches; the lines before it are skipped.
+                found=$(printf '%s\n' "$remaining" | grep -En -m 1 -- "$pattern" | cut -d: -f1)
+                if [ -z "$found" ]; then
+                        missing=$pattern
+                        break
+                fi
+                remaining=$(printf '%s\n' "$remaining" | tail -n +"$((found + 1))")
+        done <<EOF
+$expected
+EOF
+        if [ -n "$missing" ]; then
+                echo "boot-test: $name: no line matched: $missing"
+                echo "boot-test: $name: QEMU said:"
+                cat "$log"
+                echo "boot-test: $name: the serial port showed:"
+                printf '%s\n' "$actual"
+                exit 1
         fi
-        sleep 0.5
-done
+        echo "boot-test: $name: passed"
+}
 
-actual=$(tr -d '\r' <"$serial")
-if [ "$actual" != "$expected" ]; then
-        echo "boot-test: QEMU said:"
-        cat "$log"
-        echo "boot-test: the serial port showed:"
-        printf '%s\n' "$actual"
-        exit 1
-fi
-printf '%s\n' "$actual"
+start='^OpenTala: amd64, 64-bit mode$
+^OpenTala: loaded by Multiboot$
+^traps: breakpoint handled and resumed$
+^memory: 12[0-9] MiB usable, [0-9]+ page frames free below 1 GiB$
+^memory: allocator checked$
+^timer: 10 ticks at 100 Hz$'
+
+boot "halt" "" '^OpenTala: halting' "$start
+^OpenTala: halting$"
+
+boot "page fault" "opentala.test=page-fault" '^panic: ' "$start
+^test: writing to 0x0000000040000000$
+^  rip [0-9a-f]{16} cs 0008 rflags [0-9a-f]{8} ss 0010$
+^panic: page fault at 0x[0-9a-f]{16}, address 0x0000000040000000, error 2$"
+
+boot "double fault" "opentala.test=double-fault" '^panic: ' "$start
+^test: pushing to a stack at 0x0000000040000000$
+^panic: double fault \\(vector 8\\) at 0x[0-9a-f]{16}, error 0$"
+
 echo "boot-test: passed"
