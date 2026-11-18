@@ -8,6 +8,7 @@ It is not derived from Linux or XNU.
 
 - **Unix and POSIX compatibility** comes first.
 - **ABI and formats:** the native ABI is Darwin's (C++ uses the Itanium ABI), and objects and executables are Mach-O.
+  `long double` is the x87 80-bit extended format on amd64 and IEEE 754 binary64 on aarch64.
   The usual extensions are kept: `.dylib`, `.so`, `.a`, `.framework`, `.bundle`, `.kext`, `.systemextension`, `.xpc`,
   `.tbd` and `.plist`.
 - **Drivers:** IOKit and DriverKit, written in GNU99 and shaped by Progmasoft's own tools; they are not the same as

@@ -10,6 +10,17 @@
 
 #define KERN_MAIN_MULTIBOOT_MAGIC 0x2BADB002U
 
+/* The ABI of long double: x87 80-bit extended on amd64, IEEE 754 binary64 on aarch64. */
+#if defined(__x86_64__)
+_Static_assert(__LDBL_MANT_DIG__ == 64 && __SIZEOF_LONG_DOUBLE__ == 16,
+               "long double on amd64 is the x87 80-bit extended format");
+#elif defined(__aarch64__)
+_Static_assert(__LDBL_MANT_DIG__ == 53 && __SIZEOF_LONG_DOUBLE__ == 8,
+               "long double on aarch64 is IEEE 754 binary64");
+#else
+#    error "OpenTala supports amd64 and aarch64"
+#endif
+
 /**
  * @brief Stops the processor for good, with interrupts off.
  */
