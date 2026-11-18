@@ -31,7 +31,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends bmake clang lld llvm qemu-system-x86
           # ld64.lld and llvm-otool live in the versioned LLVM directory.
-          ls -d /usr/lib/llvm-*/bin | sort -V | tail -n 1 >> "$GITHUB_PATH"
+          llvm-config --bindir >> "$GITHUB_PATH"
 
       - name: Build
         run: bmake

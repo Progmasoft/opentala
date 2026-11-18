@@ -9,7 +9,8 @@
 #   make run      boots it in QEMU, the serial port on this terminal
 #   make format   checks the layout of the C files with clang-format
 
-CC?=		clang
+# The kernel's compiler; CC stays the host's, which sys.mk of BSD Make sets to cc.
+KCC?=		clang
 LD64?=		ld64.lld
 QEMU?=		qemu-system-x86_64
 CLANG_FORMAT?=	clang-format
@@ -40,7 +41,7 @@ all: ${KERNEL}
 OBJS+=		${OBJ}/${src:R}.o
 ${OBJ}/${src:R}.o: ${src} ${HDRS}
 	@mkdir -p ${.TARGET:H}
-	${CC} ${KCFLAGS} -c ${src} -o ${.TARGET}
+	${KCC} ${KCFLAGS} -c ${src} -o ${.TARGET}
 .endfor
 
 ${KERNEL}: ${OBJS}
