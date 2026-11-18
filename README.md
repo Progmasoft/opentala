@@ -21,10 +21,33 @@ It is not derived from Linux or XNU.
 - **Module signing:** anyone may sign a kernel module.
 
 It is written in GNU99 under the
-[Progmasoft Core C Coding Guidelines](https://github.com/Progmasoft/progmasoft-cpp) and built with
-[OpenKBuild](https://github.com/Progmasoft/openkbuild).
+[Progmasoft Core C Coding Guidelines](https://github.com/Progmasoft/progmasoft-cpp) and is to be built with
+[OpenKBuild](https://github.com/Progmasoft/openkbuild); until OpenKBuild exists, a BSD Makefile builds it.
 
-No code is written yet.
+## What it does
+
+The kernel boots on amd64 in QEMU: it enters through Multiboot in 32-bit mode, maps the first GiB, switches to
+64-bit mode, writes three lines to the first serial port and halts.
+
+```text
+OpenTala: amd64, 64-bit mode
+OpenTala: loaded by Multiboot
+OpenTala: halting
+```
+
+The kernel is a Mach-O executable whose `__TEXT` segment starts at 1 MiB. Its Multiboot header gives the load
+addresses itself, so a Multiboot loader copies the file without reading Mach-O.
+
+## Building and running
+
+It needs BSD Make (`bmake` on Linux), Clang and `ld64.lld` from LLVM, `llvm-otool`, and `qemu-system-x86_64`.
+
+```sh
+bmake           # build/opentala
+bmake test      # boots it in QEMU and checks the serial output
+bmake run       # boots it in QEMU, the serial port on this terminal
+bmake format    # checks the C files with clang-format 23
+```
 
 ## License
 
