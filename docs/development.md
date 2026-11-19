@@ -7,7 +7,7 @@ OpenTala needs BSD Make (`bmake`), Clang, `ld64.lld` and `llvm-otool` from LLVM,
 
 ```sh
 bmake           # build/opentala
-bmake test      # boots it three times in QEMU and checks the serial output (tools/boot-test.sh)
+bmake test      # boots it six times in QEMU and checks the serial output (tools/boot-test.sh)
 bmake run       # boots it in QEMU, the serial port on this terminal
 bmake format    # checks the C files with clang-format 23
 ```

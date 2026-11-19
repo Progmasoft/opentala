@@ -31,12 +31,15 @@ KLDFLAGS=	-arch x86_64 -platform_version macos 11.0 11.0 -pagezero_size 0x100000
 		-e Amd64_Boot_Entry64
 
 # The boot code comes first: its __text holds the Multiboot header.
-SRCS=		amd64/Amd64.Boot.S amd64/Amd64.Traps.S amd64/Amd64.Cpu.c amd64/Amd64.Pic.c \
-		amd64/Amd64.Serial.c amd64/Amd64.Timer.c amd64/Amd64.Trap.c kern/Kern.Main.c \
-		kern/Kern.PageFrames.c kern/Kern.Print.c
-HDRS=		amd64/Amd64.Cpu.h amd64/Amd64.Multiboot.h amd64/Amd64.Pic.h amd64/Amd64.Port.h \
-		amd64/Amd64.Serial.h amd64/Amd64.Timer.h amd64/Amd64.Trap.h kern/Kern.Main.h \
-		kern/Kern.PageFrames.h kern/Kern.Print.h
+SRCS=		amd64/Amd64.Boot.S amd64/Amd64.Traps.S amd64/Amd64.UserEntry.S \
+		amd64/Amd64.UserProgram.S amd64/Amd64.Cpu.c amd64/Amd64.Paging.c amd64/Amd64.Pic.c \
+		amd64/Amd64.Serial.c amd64/Amd64.Timer.c amd64/Amd64.Trap.c amd64/Amd64.User.c \
+		kern/Kern.Main.c kern/Kern.PageFrames.c kern/Kern.Print.c kern/Kern.Process.c \
+		kern/Kern.SystemCalls.c
+HDRS=		amd64/Amd64.Cpu.h amd64/Amd64.Multiboot.h amd64/Amd64.Paging.h amd64/Amd64.Pic.h \
+		amd64/Amd64.Port.h amd64/Amd64.Serial.h amd64/Amd64.Timer.h amd64/Amd64.Trap.h \
+		amd64/Amd64.User.h kern/Kern.Main.h kern/Kern.PageFrames.h kern/Kern.Print.h \
+		kern/Kern.Process.h kern/Kern.SystemCalls.h
 OBJS=
 
 all: ${KERNEL}
@@ -55,7 +58,7 @@ test: ${KERNEL}
 	QEMU=${QEMU} sh tools/boot-test.sh ${KERNEL}
 
 run: ${KERNEL}
-	${QEMU} -kernel ${KERNEL} -serial stdio -display none -no-reboot
+	${QEMU} -cpu max -kernel ${KERNEL} -serial stdio -display none -no-reboot
 
 format:
 	${CLANG_FORMAT} --style=file --dry-run --Werror ${SRCS:M*.c} ${HDRS}

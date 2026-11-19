@@ -7,6 +7,14 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+- User mode on amd64: user descriptors in the GDT, the kernel stack in the TSS, user pages from 4 GiB with
+  no-execute, SMEP and SMAP, and the kernel's memory closed to user mode.
+- Darwin's system call ABI: `syscall` with the class in RAX's high byte, the BSD table with XNU's numbers (`exit`,
+  `write`), the Mach trap table, the carry flag and errno on an error, SIGSYS for what is not there. The return is
+  through IRETQ.
+- An exception in a process kills the process with its signal instead of panicking the kernel.
+- `bmake test` boots six times: a process writes and exits, a missing BSD call and a missing Mach trap end in
+  SIGSYS, and a read of kernel memory ends in SIGSEGV.
 - Traps: OpenTala's own GDT, a task state segment whose interrupt stack table gives the double fault, the NMI and
   the machine check stacks of their own, and an IDT of the 32 exceptions and 16 legacy IRQs. A breakpoint is resumed
   after; any other exception writes the registers and panics, naming a page fault's address.
