@@ -6,7 +6,7 @@
 OpenTala is the kernel of TalaOS: an independent kernel with a hybrid architecture, a Mach layer beside a Unix kernel.
 It is not derived from Linux or XNU.
 
-- **Unix and POSIX compatibility** comes first.
+- **Unix and POSIX compatibility** comes first. The POSIX it follows is [POSIX.1-2024](https://pubs.opengroup.org/onlinepubs/9799919799/) (IEEE Std 1003.1-2024, Issue 8).
 - **Mach:** the Mach layer is OpenTala's own, written for it rather than taken from XNU's osfmk or another Mach:
   tasks and threads, ports and messages, Mach IPC, and port rights (receive, send and send-once) that a task holds in
   its port name space and passes to another in a message. A name whose port is gone becomes a dead name and is not
