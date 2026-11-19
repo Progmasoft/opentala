@@ -14,6 +14,10 @@ It is not derived from Linux or XNU.
   reused, so a task never mistakes a new port for an old one; a port set lets a task wait on many receive rights in
   one call.
 - **ABI and formats:** the native ABI is Darwin's (C++ uses the Itanium ABI), and objects and executables are Mach-O.
+- **System calls:** the system call ABI is Darwin's too: the BSD system calls and Mach traps keep XNU's numbers,
+  entered by `syscall` on amd64 (the class in the high byte of `rax`) and `svc #0x80` on arm64 (the number in `x16`),
+  with the carry flag set and the errno value returned on an error. The numbers and conventions are taken from the
+  documented interface; no code of XNU is.
   `long double` is the x87 80-bit extended format on amd64 and IEEE 754 binary64 on aarch64.
   The usual extensions are kept: `.dylib`, `.so`, `.a`, `.framework`, `.bundle`, `.kext`, `.systemextension`, `.xpc`,
   `.tbd` and `.plist`.
