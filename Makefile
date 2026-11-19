@@ -93,7 +93,7 @@ run: ${BOOTABLE}
 .if ${ARCH} == "amd64"
 	${QEMU} -cpu max -kernel ${KERNEL} -serial stdio -display none -no-reboot
 .else
-	${QEMU} -machine virt,gic-version=2 -cpu max -m 128 -kernel ${KERNEL}.img -serial stdio \
+	${QEMU} -machine virt,gic-version=2 -cpu max -nic none -m 128 -kernel ${KERNEL}.img -serial stdio \
 		-display none -no-reboot
 .endif
 

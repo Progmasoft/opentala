@@ -74,8 +74,10 @@ qemu() {
                 "$qemu" -cpu max -kernel "$kernel" -append "$1" -m 128 -serial "file:$serial" \
                         -display none -no-reboot -monitor none 2>"$log" &
         else
-                "$qemu" -machine virt,gic-version=2 -cpu max -kernel "$kernel.img" -append "$1" \
-                        -m 128 -serial "file:$serial" -display none -no-reboot -monitor none 2>"$log" &
+                # No network card: the kernel has no use for one, and virt's default needs a ROM file.
+                "$qemu" -machine virt,gic-version=2 -cpu max -nic none -kernel "$kernel.img" \
+                        -append "$1" -m 128 -serial "file:$serial" -display none -no-reboot \
+                        -monitor none 2>"$log" &
         fi
         pid=$!
 }
