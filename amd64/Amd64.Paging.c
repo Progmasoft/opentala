@@ -7,9 +7,19 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "amd64/Amd64.Paging.h"
+#include "kern/Kern.Machine.h"
 #include "kern/Kern.PageFrames.h"
 #include "kern/Kern.Print.h"
+
+/*
+ * The user half of the address space on amd64, on top of the boot code's page tables: the boot
+ * code maps the first GiB one to one, for the kernel only, and user pages go from
+ * KERN_MACHINE_USER_START to KERN_MACHINE_USER_END in 4 KiB pages whose tables come from the page
+ * frame allocator. A user page is never writable and executable at once, and the kernel's GiB is
+ * never open to user mode.
+ * No-execute pages, SMEP and SMAP are turned on where the processor has them; the kernel reads user
+ * memory only in Kern_Machine_CopyIn(), between STAC and CLAC.
+ */
 
 #define AMD64_PAGING_PRESENT 0x001ULL
 #define AMD64_PAGING_WRITE   0x002ULL
@@ -68,7 +78,7 @@ WriteMsr(uint32_t aMsr, uint64_t aValue)
 }
 
 void
-Amd64_Paging_Init(void)
+Kern_Machine_InitPaging(void)
 {
         uint32_t extended[ 4 ];
         uint32_t features[ 4 ];
@@ -134,7 +144,7 @@ IndexOf(uint64_t aVirtual, unsigned aShift)
 static bool
 IsUserPage(uint64_t aVirtual)
 {
-        return (aVirtual >= AMD64_PAGING_USER_START && aVirtual < AMD64_PAGING_USER_END
+        return (aVirtual >= KERN_MACHINE_USER_START && aVirtual < KERN_MACHINE_USER_END
                 && aVirtual % AMD64_PAGING_PAGE == 0);
 }
 
@@ -154,10 +164,10 @@ Leaf(uint64_t aVirtual)
 }
 
 bool
-Amd64_Paging_MapUser(uint64_t aVirtual, uint64_t aPhysical, unsigned aFlags)
+Kern_Machine_MapUser(uint64_t aVirtual, uint64_t aPhysical, unsigned aFlags)
 {
-        const bool isWritable   = (aFlags & AMD64_PAGING_WRITABLE) != 0;
-        const bool isExecutable = (aFlags & AMD64_PAGING_EXECUTABLE) != 0;
+        const bool isWritable   = (aFlags & KERN_MACHINE_WRITABLE) != 0;
+        const bool isExecutable = (aFlags & KERN_MACHINE_EXECUTABLE) != 0;
 
         if(!IsUserPage(aVirtual) || aPhysical % AMD64_PAGING_PAGE != 0
            || (isWritable && isExecutable))
@@ -195,12 +205,12 @@ IsUserReadable(uint64_t aVirtual)
 }
 
 bool
-Amd64_Paging_CopyIn(void* aOut_pDestination, uint64_t aSource, size_t aLength)
+Kern_Machine_CopyIn(void* aOut_pDestination, uint64_t aSource, size_t aLength)
 {
         if(aLength == 0)
                 return (true);
-        if(aSource < AMD64_PAGING_USER_START || aSource >= AMD64_PAGING_USER_END
-           || aLength > AMD64_PAGING_USER_END - aSource)
+        if(aSource < KERN_MACHINE_USER_START || aSource >= KERN_MACHINE_USER_END
+           || aLength > KERN_MACHINE_USER_END - aSource)
                 return (false);
         for(uint64_t page = aSource & ~(AMD64_PAGING_PAGE - 1); page < aSource + aLength;
             page         += AMD64_PAGING_PAGE)
@@ -239,7 +249,7 @@ FreeTable(uint64_t* aInOut_pTable, unsigned aLevel)
 }
 
 void
-Amd64_Paging_ClearUser(void)
+Kern_Machine_ClearUser(void)
 {
         for(unsigned index = 0; index < AMD64_PAGING_LOWER_HALF; index++)
         {

@@ -7,15 +7,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "amd64/Amd64.Cpu.h"
-#include "amd64/Amd64.Multiboot.h"
-#include "amd64/Amd64.Paging.h"
-#include "amd64/Amd64.Pic.h"
-#include "amd64/Amd64.Serial.h"
-#include "amd64/Amd64.Timer.h"
-#include "amd64/Amd64.Trap.h"
-#include "amd64/Amd64.User.h"
-#include "kern/Kern.Main.h"
+#include "kern/Kern.Boot.h"
+#include "kern/Kern.Machine.h"
 #include "kern/Kern.PageFrames.h"
 #include "kern/Kern.Print.h"
 #include "kern/Kern.Process.h"
@@ -24,8 +17,6 @@
 #define KERN_MAIN_COMMAND_LINE_MAX 4096
 /** How many ticks the timer check waits for. */
 #define KERN_MAIN_TICKS 10
-/** The first address the boot code leaves unmapped, which the page fault test writes to. */
-#define KERN_MAIN_UNMAPPED 0x40000000UL
 
 /* The ABI of long double: x87 80-bit extended on amd64, IEEE 754 binary64 on aarch64. */
 #if defined(__x86_64__)
@@ -38,13 +29,31 @@ _Static_assert(__LDBL_MANT_DIG__ == 53 && __SIZEOF_LONG_DOUBLE__ == 8,
 #    error "OpenTala supports amd64 and aarch64"
 #endif
 
-/* The test program of Amd64.UserProgram.S, which the kernel copies into a process. */
-extern const char gKern_UserProgramStart[] __asm__("Amd64_UserProgram_Start");
-extern const char gKern_UserProgramEnd[] __asm__("Amd64_UserProgram_End");
-
 /* Where the linker put the kernel: from the start of __TEXT to the end of __DATA, its bss too. */
 extern char gKern_ImageStart[] __asm__("segment$start$__TEXT");
 extern char gKern_ImageEnd[] __asm__("segment$end$__DATA");
+
+/* The test program of the architecture's UserProgram.S, which the kernel copies into a process. */
+extern const char gKern_UserProgramStart[] __asm__("Machine_UserProgram_Start");
+extern const char gKern_UserProgramEnd[] __asm__("Machine_UserProgram_End");
+
+void
+Kern_Boot_AddRange(Kern_Boot_tRange* aInOut_pRanges,
+                   unsigned*         aInOut_pCount,
+                   uint64_t          aStart,
+                   uint64_t          aLength)
+{
+        if(*aInOut_pCount >= KERN_BOOT_RANGES)
+        {
+                Kern_Print("boot: a range at %p is dropped, %u are kept\n",
+                           (void*) aStart,
+                           KERN_BOOT_RANGES);
+                return;
+        }
+        aInOut_pRanges[ *aInOut_pCount ].start  = aStart;
+        aInOut_pRanges[ *aInOut_pCount ].length = aLength;
+        (*aInOut_pCount)++;
+}
 
 /**
  * @brief The length of a string of at most aMaximum bytes.
@@ -63,15 +72,8 @@ BoundedLength(const char* aIn_pText, size_t aMaximum)
         return (length);
 }
 
-/**
- * @brief Whether the command line has aIn_pWord as one of its space-separated words.
- *
- * @param[in] aIn_pLine The command line, or NULL.
- * @param[in] aIn_pWord The word.
- * @return true when it does.
- */
-static bool
-HasWord(const char* aIn_pLine, const char* aIn_pWord)
+bool
+Kern_Main_HasWord(const char* aIn_pLine, const char* aIn_pWord)
 {
         if(aIn_pLine == NULL)
                 return (false);
@@ -92,53 +94,38 @@ HasWord(const char* aIn_pLine, const char* aIn_pWord)
 }
 
 /**
- * @brief Gives the allocator the RAM of the loader's memory map, and takes back what the kernel,
- * the first MiB and the loader's own structures hold.
+ * @brief Gives the allocator the loader's RAM, and takes back the kernel and what the loader
+ * reserved.
  *
- * @param[in] aIn_pInformation The loader's information.
+ * @param[in] aIn_pInformation What the loader gave.
  */
 static void
-ReadMemoryMap(const Amd64_Multiboot_Information* aIn_pInformation)
+ReadMemory(const Kern_Boot_tInformation* aIn_pInformation)
 {
-        if((aIn_pInformation->flags & AMD64_MULTIBOOT_HAS_MEMORY_MAP) == 0)
-                Kern_Panic("the loader gave no memory map");
+        uint64_t usable = 0;
 
-        const uint8_t* pCursor = (const uint8_t*) (uintptr_t) aIn_pInformation->memoryMapAddress;
-        const uint8_t* pEnd    = pCursor + aIn_pInformation->memoryMapLength;
-        uint64_t       usable  = 0;
-
+        if(aIn_pInformation->memoryCount == 0)
+                Kern_Panic("the loader gave no memory");
         Kern_PageFrames_Init();
-        while(pCursor + sizeof(Amd64_Multiboot_MemoryRange) <= pEnd)
+        for(unsigned index = 0; index < aIn_pInformation->memoryCount; index++)
         {
-                const Amd64_Multiboot_MemoryRange* pRange = (const Amd64_Multiboot_MemoryRange*)
-                        pCursor;
-
-                if(pRange->size < sizeof(*pRange) - sizeof(pRange->size))
-                        Kern_Panic("a memory map entry of %u bytes is too short", pRange->size);
-                if(pRange->type == AMD64_MULTIBOOT_MEMORY_AVAILABLE)
-                {
-                        Kern_PageFrames_AddFree(pRange->address, pRange->length);
-                        usable += pRange->length;
-                }
-                pCursor += pRange->size + sizeof(pRange->size);
+                Kern_PageFrames_AddFree(aIn_pInformation->memory[ index ].start,
+                                        aIn_pInformation->memory[ index ].length);
+                usable += aIn_pInformation->memory[ index ].length;
         }
-        /* Real-mode structures, the BIOS and devices live below 1 MiB. */
-        Kern_PageFrames_Reserve(0, 0x100000);
         Kern_PageFrames_Reserve((uintptr_t) gKern_ImageStart,
                                 (uint64_t) (gKern_ImageEnd - gKern_ImageStart));
-        Kern_PageFrames_Reserve((uintptr_t) aIn_pInformation, sizeof(*aIn_pInformation));
-        Kern_PageFrames_Reserve(aIn_pInformation->memoryMapAddress,
-                                aIn_pInformation->memoryMapLength);
-        if((aIn_pInformation->flags & AMD64_MULTIBOOT_HAS_COMMAND_LINE) != 0)
-                Kern_PageFrames_Reserve(aIn_pInformation->commandLine, KERN_MAIN_COMMAND_LINE_MAX);
-        Kern_Print("memory: %lu MiB usable, %lu page frames free below 1 GiB\n",
+        for(unsigned index = 0; index < aIn_pInformation->reservedCount; index++)
+                Kern_PageFrames_Reserve(aIn_pInformation->reserved[ index ].start,
+                                        aIn_pInformation->reserved[ index ].length);
+        Kern_Print("memory: %lu MiB usable, %lu page frames free\n",
                    (unsigned long) (usable >> 20),
                    (unsigned long) Kern_PageFrames_FreeCount());
 }
 
 /**
- * @brief Panics unless frame aIn_pFrames[ aIndex ] is one the allocator may give: aligned, above
- * the first MiB, outside the kernel image, and none of the frames before it.
+ * @brief Panics unless frame aIn_pFrames[ aIndex ] is one the allocator may give: aligned, in its
+ * range, outside the kernel image, and none of the frames before it.
  *
  * @param[in] aIn_pFrames The frames allocated so far.
  * @param[in] aIndex      The one to check.
@@ -150,8 +137,10 @@ CheckAllocatedFrame(const uint64_t* aIn_pFrames, unsigned aIndex)
         const uint64_t imageStart = (uintptr_t) gKern_ImageStart;
         const uint64_t imageEnd   = (uintptr_t) gKern_ImageEnd;
         const bool     isInImage  = frame + KERN_PAGE_FRAMES_SIZE > imageStart && frame < imageEnd;
+        const bool     isOutside  = frame < KERN_PAGE_FRAMES_BASE
+                || frame >= KERN_PAGE_FRAMES_BASE + KERN_PAGE_FRAMES_LIMIT;
 
-        if(frame % KERN_PAGE_FRAMES_SIZE != 0 || frame < 0x100000 || isInImage)
+        if(frame % KERN_PAGE_FRAMES_SIZE != 0 || isOutside || isInImage)
                 Kern_Panic("the allocator gave %p, which it holds back", (void*) frame);
         for(unsigned earlier = 0; earlier < aIndex; earlier++)
                 if(aIn_pFrames[ earlier ] == frame)
@@ -184,18 +173,15 @@ CheckPageFrames(void)
 }
 
 /**
- * @brief Turns interrupts on until the timer has ticked KERN_MAIN_TICKS times.
+ * @brief Starts the timer and waits until it has ticked KERN_MAIN_TICKS times.
  */
 static void
 CheckTimer(void)
 {
-        Amd64_Pic_Init();
-        Amd64_Timer_Init();
-        __asm__ volatile("sti");
-        while(Amd64_Timer_Ticks() < KERN_MAIN_TICKS)
-                __asm__ volatile("hlt");
-        __asm__ volatile("cli");
-        Kern_Print("timer: %u ticks at %u Hz\n", KERN_MAIN_TICKS, AMD64_TIMER_HZ);
+        Kern_Machine_StartTimer();
+        while(Kern_Machine_Ticks() < KERN_MAIN_TICKS)
+                Kern_Machine_WaitForInterrupt();
+        Kern_Print("timer: %u ticks at %u Hz\n", KERN_MAIN_TICKS, KERN_MACHINE_TIMER_HZ);
 }
 
 /**
@@ -219,7 +205,7 @@ RunUserProgram(const char* aIn_pCommandLine)
         uint64_t argument = 0;
 
         for(unsigned index = 0; index < sizeof(skTests) / sizeof(skTests[ 0 ]); index++)
-                if(HasWord(aIn_pCommandLine, skTests[ index ]))
+                if(Kern_Main_HasWord(aIn_pCommandLine, skTests[ index ]))
                         argument = index + 1;
         const uint64_t              before  = Kern_PageFrames_FreeCount();
         const Kern_Process_tOutcome outcome = Kern_Process_Run(
@@ -239,66 +225,31 @@ RunUserProgram(const char* aIn_pCommandLine)
         Kern_Print("process %u: every page given back\n", outcome.id);
 }
 
-/**
- * @brief The first C function of the kernel, called in 64-bit mode by the boot code.
- *
- * It sets up the processor's tables, checks that an exception comes back, reads the memory map,
- * checks the page frame allocator and the timer, and halts. With `opentala.test=page-fault` on the
- * command line, it writes to an unmapped address first, and with `opentala.test=double-fault` it
- * pushes to an unmapped stack; either must end in a panic that names the fault.
- *
- * @param[in] aBootMagic       The value the loader left in EAX; 0x2BADB002 for Multiboot.
- * @param[in] aBootInformation The physical address of the loader's information structure.
- */
-__attribute__((noreturn)) void
-Kern_Main(uint32_t aBootMagic, uint32_t aBootInformation)
+void
+Kern_Main(const Kern_Boot_tInformation* aIn_pInformation)
 {
-        Amd64_Serial_Init();
-        Kern_Print("OpenTala: amd64, 64-bit mode\n");
-        if(aBootMagic != AMD64_MULTIBOOT_LOADER_MAGIC)
-                Kern_Panic("loaded by an unknown loader (magic %x)", aBootMagic);
-        Kern_Print("OpenTala: loaded by Multiboot\n");
+        const char* pCommandLine = aIn_pInformation->pCommandLine;
 
-        const Amd64_Multiboot_Information* pInformation
-                = (const Amd64_Multiboot_Information*) (uintptr_t) aBootInformation;
-        const char* pCommandLine = (pInformation->flags & AMD64_MULTIBOOT_HAS_COMMAND_LINE) != 0
-                ? (const char*) (uintptr_t) pInformation->commandLine
-                : NULL;
-
-        Amd64_Cpu_Init();
-        __asm__ volatile("int3");
-        if(Amd64_Trap_Breakpoints() != 1)
+        Kern_Print("OpenTala: loaded by %s\n", aIn_pInformation->pLoader);
+        Kern_Machine_InitTraps();
+        if(Kern_Machine_Breakpoint() != 1)
                 Kern_Panic("the breakpoint did not reach its handler");
         Kern_Print("traps: breakpoint handled and resumed\n");
 
-        ReadMemoryMap(pInformation);
+        ReadMemory(aIn_pInformation);
         CheckPageFrames();
         CheckTimer();
-        Amd64_Paging_Init();
-        Amd64_User_Init();
+        Kern_Machine_InitPaging();
+        Kern_Machine_InitUser();
         RunUserProgram(pCommandLine);
 
-        if(HasWord(pCommandLine, "opentala.test=page-fault"))
+        if(Kern_Main_HasWord(pCommandLine, "opentala.test=page-fault"))
         {
-                Kern_Print("test: writing to %p\n", (void*) KERN_MAIN_UNMAPPED);
-                *(volatile uint32_t*) KERN_MAIN_UNMAPPED = 1;
+                Kern_Print("test: writing to %p\n", (void*) KERN_MACHINE_UNMAPPED);
+                *(volatile uint32_t*) KERN_MACHINE_UNMAPPED = 1;
                 Kern_Panic("the write to an unmapped address did not fault");
         }
-        if(HasWord(pCommandLine, "opentala.test=double-fault"))
-        {
-                /*
-                 * The stack pointer goes to an unmapped address: the push faults, the processor
-                 * cannot push the page fault's frame there either, and the double fault that
-                 * follows must run on its own stack to be reported at all.
-                 */
-                Kern_Print("test: pushing to a stack at %p\n", (void*) KERN_MAIN_UNMAPPED);
-                __asm__ volatile("movq %0, %%rsp\n\t"
-                                 "pushq $0"
-                                 :
-                                 : "r"(KERN_MAIN_UNMAPPED + KERN_PAGE_FRAMES_SIZE)
-                                 : "memory");
-                Kern_Panic("the push to an unmapped stack did not fault");
-        }
+        Kern_Machine_RunTests(pCommandLine);
         Kern_Print("OpenTala: halting\n");
-        Kern_Halt();
+        Kern_Machine_Halt();
 }

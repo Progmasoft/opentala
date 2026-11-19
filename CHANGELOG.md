@@ -7,6 +7,13 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+- arm64 on QEMU's virt machine: an Image header before the Mach-O kernel, so QEMU's `-kernel` and other arm64 Linux
+  loaders boot it; EL2 to EL1, exception vectors, the GICv2 and the generic timer, the PL011, the MMU with the
+  kernel's RAM closed to EL0, PXN and UXN, PAN, and Darwin's `svc #0x80` with X16, the carry flag and errno.
+  `bmake ARCH=arm64 test` boots five times, as amd64 does.
+- The device tree is read for the RAM, the reserved ranges and the command line, with every offset checked.
+- `kern/Kern.Machine.h` is what the kernel asks of an architecture; nothing in `kern/` includes an
+  architecture's header any more. The page frame allocator covers the first GiB of RAM wherever RAM starts.
 - User mode on amd64: user descriptors in the GDT, the kernel stack in the TSS, user pages from 4 GiB with
   no-execute, SMEP and SMAP, and the kernel's memory closed to user mode.
 - Darwin's system call ABI: `syscall` with the class in RAX's high byte, the BSD table with XNU's numbers (`exit`,

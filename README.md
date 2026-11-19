@@ -55,7 +55,7 @@ and halts. A fault it does not expect writes the registers and ends in a panic t
 OpenTala: amd64, 64-bit mode
 OpenTala: loaded by Multiboot
 traps: breakpoint handled and resumed
-memory: 127 MiB usable, 32447 page frames free below 1 GiB
+memory: 127 MiB usable, 32442 page frames free
 memory: allocator checked
 timer: 10 ticks at 100 Hz
 paging: no-execute on, SMEP on, SMAP on
@@ -71,6 +71,29 @@ On the command line (`-append` in QEMU), `opentala.test=page-fault` writes to an
 `opentala.test=double-fault` pushes to an unmapped stack, each ending in a panic; `opentala.test=unknown-system-call`
 and `opentala.test=mach-trap` make the process call what OpenTala does not have, and `opentala.test=user-fault`
 makes it read the kernel's memory, each killing only the process. `bmake test` boots all six ways.
+
+On arm64 it boots on QEMU's virt machine (`bmake ARCH=arm64 run`) through the header of an arm64 Linux Image, so
+QEMU's `-kernel` and other loaders of such images start it with the device tree, at EL2 or EL1. It drops to EL1, turns
+the MMU on with the kernel's RAM closed to EL0, reads the RAM and the command line from the device tree, takes a
+breakpoint (`brk`), starts the generic timer through the GICv2, turns PAN on where the processor has it, and runs the
+same process in EL0 through `svc #0x80` with the number in X16:
+
+```text
+OpenTala: arm64, EL1
+OpenTala: loaded by a device tree
+traps: breakpoint handled and resumed
+memory: 128 MiB usable, 32480 page frames free
+memory: allocator checked
+timer: 10 ticks at 100 Hz
+paging: execute-never, PAN on
+user: system calls through SVC #0x80, back through ERET
+user: hello from user mode
+process 1: exited with status 0
+process 1: every page given back
+OpenTala: halting
+```
+
+`bmake ARCH=arm64 test` boots it the same five ways as amd64, the double fault aside, which arm64 does not have.
 
 The kernel is a Mach-O executable whose `__TEXT` segment starts at 1 MiB. Its Multiboot header gives the load
 addresses itself, so a Multiboot loader copies the file without reading Mach-O.

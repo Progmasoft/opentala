@@ -70,12 +70,12 @@ Amd64_User_SystemCallEntry:
         iretq
 
 /*
- * int64_t Amd64_User_Enter(Amd64_User_tContext* context, uint64_t entry, uint64_t stack,
- *                          uint64_t argument)
+ * int64_t Kern_Machine_Enter(Kern_Machine_tContext* context, uint64_t entry, uint64_t stack,
+ *                            uint64_t argument): the context holds RBX, RBP, R12 to R15 and RSP.
  */
-        .globl _Amd64_User_Enter
+        .globl _Kern_Machine_Enter
         .p2align 4
-_Amd64_User_Enter:
+_Kern_Machine_Enter:
         movq %rbx, 0(%rdi)
         movq %rbp, 8(%rdi)
         movq %r12, 16(%rdi)
@@ -108,10 +108,10 @@ _Amd64_User_Enter:
         xorl %r15d, %r15d
         iretq
 
-/* void Amd64_User_Leave(const Amd64_User_tContext* context, int64_t value) */
-        .globl _Amd64_User_Leave
+/* void Kern_Machine_Leave(const Kern_Machine_tContext* context, int64_t value) */
+        .globl _Kern_Machine_Leave
         .p2align 4
-_Amd64_User_Leave:
+_Kern_Machine_Leave:
         movw $SELECTOR_KERNEL_DATA, %ax
         movw %ax, %ds
         movw %ax, %es

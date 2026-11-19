@@ -12,9 +12,15 @@
 #define KERN_PAGE_FRAMES_SIZE 4096U
 
 /**
- * The physical memory the allocator covers: what the boot code maps, the first GiB. RAM above it
- * waits for the kernel's own page tables.
+ * The physical memory the allocator covers, from KERN_PAGE_FRAMES_BASE: the first GiB of RAM, which
+ * the boot code maps one to one. RAM above it waits for the kernel's own page tables.
  */
+#if defined(__aarch64__)
+/** RAM starts at 1 GiB on QEMU's virt machine. */
+#    define KERN_PAGE_FRAMES_BASE 0x40000000ULL
+#else
+#    define KERN_PAGE_FRAMES_BASE 0x0ULL
+#endif
 #define KERN_PAGE_FRAMES_LIMIT 0x40000000ULL
 
 /**

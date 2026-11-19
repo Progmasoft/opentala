@@ -5,9 +5,10 @@
 
 #include <stdarg.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
-#include "amd64/Amd64.Serial.h"
+#include "kern/Kern.Machine.h"
 #include "kern/Kern.Print.h"
 
 /** The digits of the widest number, 64 bits in octal, and room for the sign. */
@@ -38,13 +39,8 @@ typedef struct
 static void
 WriteBytes(const char* aIn_pText, int aCount)
 {
-        char piece[ 2 ] = { 0, 0 };
-
-        for(int index = 0; index < aCount; index++)
-        {
-                piece[ 0 ] = aIn_pText[ index ];
-                Amd64_Serial_Write(piece);
-        }
+        if(aCount > 0)
+                Kern_Machine_ConsoleWrite(aIn_pText, (size_t) aCount);
 }
 
 /**
@@ -300,8 +296,7 @@ Kern_Print(const char* aIn_pFormat, ...)
 void
 Kern_Halt(void)
 {
-        for(;;)
-                __asm__ volatile("cli; hlt");
+        Kern_Machine_Halt();
 }
 
 void
@@ -309,7 +304,6 @@ Kern_Panic(const char* aIn_pFormat, ...)
 {
         va_list arguments;
 
-        __asm__ volatile("cli");
         Kern_Print("panic: ");
         va_start(arguments, aIn_pFormat);
         Kern_PrintArguments(aIn_pFormat, arguments);

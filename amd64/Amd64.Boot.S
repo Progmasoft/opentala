@@ -12,7 +12,7 @@
  * clears the zero-filled sections after it.
  *
  * The code maps the first GiB one to one with 2 MiB pages, turns on long mode and calls
- * Kern_Main() in 64-bit mode.
+ * Amd64_Main() in 64-bit mode.
  */
 
 #define MULTIBOOT_MAGIC     0x1BADB002
@@ -110,7 +110,7 @@ Amd64_Boot_Entry64:
 
         movl gsBootMagic(%rip), %edi
         movl gsBootInformation(%rip), %esi
-        callq _Kern_Main
+        callq _Amd64_Main
 2:
         cli
         hlt

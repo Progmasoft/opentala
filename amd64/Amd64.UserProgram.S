@@ -5,7 +5,7 @@
 
 /*
  * The test program the kernel runs in user mode. The kernel copies the bytes from
- * Amd64_UserProgram_Start to Amd64_UserProgram_End into a process, so the code reaches its data
+ * Machine_UserProgram_Start to Machine_UserProgram_End into a process, so the code reaches its data
  * only relative to RIP. It makes Darwin's system calls the way libSystem's stubs do: the class and
  * number in RAX, the arguments in RDI, RSI and RDX, `syscall`, and the carry flag for an error.
  *
@@ -24,10 +24,10 @@
 #define KERNEL_ADDRESS 0x100000
 
         .text
-        .globl Amd64_UserProgram_Start
-        .globl Amd64_UserProgram_End
+        .globl Machine_UserProgram_Start
+        .globl Machine_UserProgram_End
         .p2align 4
-Amd64_UserProgram_Start:
+Machine_UserProgram_Start:
         cmpq $1, %rdi
         je UnknownBsd
         cmpq $2, %rdi
@@ -95,4 +95,4 @@ ReadKernel:
 Greeting:
         .ascii "user: hello from user mode\n"
 GreetingEnd:
-Amd64_UserProgram_End:
+Machine_UserProgram_End:
