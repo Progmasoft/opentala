@@ -56,7 +56,7 @@ Arm64_Paging_EnableMmu(void)
 
         gsLevel0[ 0 ] = (uint64_t) (uintptr_t) gsLevel1 | ARM64_PAGING_TABLE;
         /* The devices: never executed, not reachable from EL0. */
-        gsLevel1[ 0 ] = 0 | ARM64_PAGING_BLOCK | ARM64_PAGING_DEVICE | ARM64_PAGING_ACCESSED
+        gsLevel1[ 0 ] = ARM64_PAGING_BLOCK | ARM64_PAGING_DEVICE | ARM64_PAGING_ACCESSED
                 | ARM64_PAGING_PXN | ARM64_PAGING_UXN;
         /* The RAM: the kernel's, which EL0 can neither reach nor execute. */
         gsLevel1[ 1 ] = ARM64_PAGING_GIB | ARM64_PAGING_BLOCK | ARM64_PAGING_NORMAL
