@@ -42,6 +42,8 @@ The kernel boots on amd64 in QEMU: it enters through Multiboot in 32-bit mode, m
 - reads the loader's memory map into a page frame allocator, with the first MiB, the kernel and the loader's
   structures held back, and checks it;
 - starts the timer at 100 Hz through the PIC and the PIT, waits for ten ticks,
+- turns on no-execute pages, SMEP and SMAP, and runs a process in user mode, which writes a line and exits through
+  Darwin's system calls (`syscall`, XNU's numbers, the carry flag on an error) and gives every page back,
 
 and halts. A fault it does not expect writes the registers and ends in a panic that names it.
 
@@ -52,11 +54,19 @@ traps: breakpoint handled and resumed
 memory: 127 MiB usable, 32447 page frames free below 1 GiB
 memory: allocator checked
 timer: 10 ticks at 100 Hz
+paging: no-execute on, SMEP on, SMAP on
+user: system calls through SYSCALL, back through IRETQ
+user: hello from user mode
+process 1: exited with status 0
+process 1: every page given back
 OpenTala: halting
 ```
 
-`opentala.test=page-fault` on the command line (`-append` in QEMU) writes to an unmapped address and
-`opentala.test=double-fault` pushes to an unmapped stack; `bmake test` boots all three ways.
+The line `user: hello from user mode` is written by a process in user mode through Darwin's `write` system call.
+On the command line (`-append` in QEMU), `opentala.test=page-fault` writes to an unmapped address and
+`opentala.test=double-fault` pushes to an unmapped stack, each ending in a panic; `opentala.test=unknown-system-call`
+and `opentala.test=mach-trap` make the process call what OpenTala does not have, and `opentala.test=user-fault`
+makes it read the kernel's memory, each killing only the process. `bmake test` boots all six ways.
 
 The kernel is a Mach-O executable whose `__TEXT` segment starts at 1 MiB. Its Multiboot header gives the load
 addresses itself, so a Multiboot loader copies the file without reading Mach-O.

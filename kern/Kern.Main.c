@@ -9,13 +9,16 @@
 
 #include "amd64/Amd64.Cpu.h"
 #include "amd64/Amd64.Multiboot.h"
+#include "amd64/Amd64.Paging.h"
 #include "amd64/Amd64.Pic.h"
 #include "amd64/Amd64.Serial.h"
 #include "amd64/Amd64.Timer.h"
 #include "amd64/Amd64.Trap.h"
+#include "amd64/Amd64.User.h"
 #include "kern/Kern.Main.h"
 #include "kern/Kern.PageFrames.h"
 #include "kern/Kern.Print.h"
+#include "kern/Kern.Process.h"
 
 /** The longest command line the kernel reads; the rest is ignored. */
 #define KERN_MAIN_COMMAND_LINE_MAX 4096
@@ -34,6 +37,10 @@ _Static_assert(__LDBL_MANT_DIG__ == 53 && __SIZEOF_LONG_DOUBLE__ == 8,
 #else
 #    error "OpenTala supports amd64 and aarch64"
 #endif
+
+/* The test program of Amd64.UserProgram.S, which the kernel copies into a process. */
+extern const char gKern_UserProgramStart[] __asm__("Amd64_UserProgram_Start");
+extern const char gKern_UserProgramEnd[] __asm__("Amd64_UserProgram_End");
 
 /* Where the linker put the kernel: from the start of __TEXT to the end of __DATA, its bss too. */
 extern char gKern_ImageStart[] __asm__("segment$start$__TEXT");
@@ -192,6 +199,47 @@ CheckTimer(void)
 }
 
 /**
+ * @brief Runs the test program in user mode, and checks that its pages all come back.
+ *
+ * The command line picks what the program does: by default it writes a line and checks the errors
+ * of write; `opentala.test=unknown-system-call` and `opentala.test=mach-trap` make a system call
+ * OpenTala does not have, and `opentala.test=user-fault` reads kernel memory. Each must end the
+ * process, and only the process.
+ *
+ * @param[in] aIn_pCommandLine The command line, or NULL.
+ */
+static void
+RunUserProgram(const char* aIn_pCommandLine)
+{
+        static const char* const skTests[] = {
+                "opentala.test=unknown-system-call",
+                "opentala.test=mach-trap",
+                "opentala.test=user-fault",
+        };
+        uint64_t argument = 0;
+
+        for(unsigned index = 0; index < sizeof(skTests) / sizeof(skTests[ 0 ]); index++)
+                if(HasWord(aIn_pCommandLine, skTests[ index ]))
+                        argument = index + 1;
+        const uint64_t              before  = Kern_PageFrames_FreeCount();
+        const Kern_Process_tOutcome outcome = Kern_Process_Run(
+                gKern_UserProgramStart,
+                (size_t) (gKern_UserProgramEnd - gKern_UserProgramStart),
+                argument);
+
+        if(outcome.signal != 0)
+                Kern_Print("process %u: killed by %s\n",
+                           outcome.id,
+                           Kern_Process_SignalName(outcome.signal));
+        else
+                Kern_Print("process %u: exited with status %d\n", outcome.id, outcome.status);
+        if(Kern_PageFrames_FreeCount() != before)
+                Kern_Panic("the process kept %ld page frames",
+                           (long) (before - Kern_PageFrames_FreeCount()));
+        Kern_Print("process %u: every page given back\n", outcome.id);
+}
+
+/**
  * @brief The first C function of the kernel, called in 64-bit mode by the boot code.
  *
  * It sets up the processor's tables, checks that an exception comes back, reads the memory map,
@@ -226,6 +274,9 @@ Kern_Main(uint32_t aBootMagic, uint32_t aBootInformation)
         ReadMemoryMap(pInformation);
         CheckPageFrames();
         CheckTimer();
+        Amd64_Paging_Init();
+        Amd64_User_Init();
+        RunUserProgram(pCommandLine);
 
         if(HasWord(pCommandLine, "opentala.test=page-fault"))
         {

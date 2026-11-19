@@ -72,3 +72,14 @@ Amd64_Serial_Write(const char* aIn_pText)
                 WriteByte((uint8_t) *pCharacter);
         }
 }
+
+void
+Amd64_Serial_WriteBytes(const char* aIn_pBytes, size_t aCount)
+{
+        for(size_t index = 0; index < aCount; index++)
+        {
+                if(aIn_pBytes[ index ] == '\n')
+                        WriteByte('\r');
+                WriteByte((uint8_t) aIn_pBytes[ index ]);
+        }
+}
