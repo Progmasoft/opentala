@@ -60,11 +60,18 @@ typedef struct __attribute__((packed))
 extern char gAmd64_Traps_Stubs[] __asm__("Amd64_Traps_Stubs");
 
 /*
- * Null, kernel code, kernel data, and the TSS, whose descriptor takes two entries. The code and
- * data descriptors are those of the boot code, with the accessed bit set.
+ * Null, kernel code, kernel data, user data, user code, and the TSS, whose descriptor takes two
+ * entries. The kernel's descriptors are those of the boot code, with the accessed bit set; the
+ * user's are the same of privilege 3.
  */
-static uint64_t gsGdt[ 5 ] __attribute__((aligned(16))) = {
-        0, 0x00AF9B000000FFFFULL, 0x00CF93000000FFFFULL, 0, 0,
+static uint64_t gsGdt[ 7 ] __attribute__((aligned(16))) = {
+        0,
+        0x00AF9B000000FFFFULL,
+        0x00CF93000000FFFFULL,
+        0x00CFF3000000FFFFULL,
+        0x00AFFB000000FFFFULL,
+        0,
+        0,
 };
 
 static Tss  gsTss __attribute__((aligned(16)));
@@ -82,10 +89,10 @@ LoadGdt(void)
         const uint64_t      limit = sizeof(gsTss) - 1;
         const TableRegister gdtr  = { sizeof(gsGdt) - 1, (uint64_t) (uintptr_t) gsGdt };
 
-        gsGdt[ 3 ] = (limit & 0xFFFF) | ((base & 0xFFFFFF) << 16)
+        gsGdt[ 5 ] = (limit & 0xFFFF) | ((base & 0xFFFFFF) << 16)
                 | ((uint64_t) AMD64_CPU_DESCRIPTOR_TSS << 40) | (((limit >> 16) & 0xF) << 48)
                 | (((base >> 24) & 0xFF) << 56);
-        gsGdt[ 4 ] = base >> 32;
+        gsGdt[ 6 ] = base >> 32;
         __asm__ volatile("lgdt %0\n\t"
                          /* A far return loads CS: push the selector and the address after it. */
                          "pushq %1\n\t"
@@ -154,6 +161,12 @@ LoadIdt(void)
                 pGate->reserved     = 0;
         }
         __asm__ volatile("lidt %0" : : "m"(idtr) : "memory");
+}
+
+void
+Amd64_Cpu_SetKernelStack(uint64_t aTop)
+{
+        gsTss.rsp[ 0 ] = aTop;
 }
 
 void

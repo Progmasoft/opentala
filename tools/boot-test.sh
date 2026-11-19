@@ -4,7 +4,7 @@
 #
 # Usage: boot-test.sh <kernel>
 #
-# Checks that the Mach-O layout of <kernel> can be loaded flat, then boots it in QEMU three
+# Checks that the Mach-O layout of <kernel> can be loaded flat, then boots it in QEMU six
 # times, with 128 MiB, and checks what it writes to the serial port:
 #
 #   - without a command line: traps, the memory map, the page frame allocator and the timer
@@ -12,7 +12,12 @@
 #   - with opentala.test=page-fault: a write to an unmapped address ends in a panic that names
 #     the page fault and its address;
 #   - with opentala.test=double-fault: a push to an unmapped stack ends in a panic that names the
-#     double fault, which only its own stack (the IST) can report.
+#     double fault, which only its own stack (the IST) can report;
+#   - a process in user mode writes a line through Darwin's write system call and exits; with
+#     opentala.test=unknown-system-call, mach-trap or user-fault it is killed by SIGSYS or SIGSEGV,
+#     and the kernel goes on.
+#
+# QEMU runs with -cpu max, so that no-execute pages, SMEP and SMAP are there to be turned on.
 #
 # Each expected line is an extended regular expression that must match one line of the output,
 # in order.
@@ -55,8 +60,8 @@ boot() {
         last=$3
         expected=$4
         : >"$serial"
-        "$qemu" -kernel "$kernel" -append "$line" -m 128 -serial "file:$serial" -display none \
-                -no-reboot -monitor none 2>"$log" &
+        "$qemu" -cpu max -kernel "$kernel" -append "$line" -m 128 -serial "file:$serial" \
+                -display none -no-reboot -monitor none 2>"$log" &
         pid=$!
         for _ in $(seq 1 60); do
                 if grep -Eq "$last" "$serial" || ! kill -0 "$pid" 2>/dev/null; then
@@ -99,10 +104,32 @@ start='^OpenTala: amd64, 64-bit mode$
 ^traps: breakpoint handled and resumed$
 ^memory: 12[0-9] MiB usable, [0-9]+ page frames free below 1 GiB$
 ^memory: allocator checked$
-^timer: 10 ticks at 100 Hz$'
+^timer: 10 ticks at 100 Hz$
+^paging: no-execute on, SMEP on, SMAP on$
+^user: system calls through SYSCALL, back through IRETQ$'
+
+halt='^process 1: every page given back$
+^OpenTala: halting$'
 
 boot "halt" "" '^OpenTala: halting' "$start
-^OpenTala: halting$"
+^user: hello from user mode$
+^process 1: exited with status 0$
+$halt"
+
+boot "unknown system call" "opentala.test=unknown-system-call" '^OpenTala: halting' "$start
+^process 1: system call 0x3e7 of class 2 is not implemented$
+^process 1: killed by SIGSYS$
+$halt"
+
+boot "Mach trap" "opentala.test=mach-trap" '^OpenTala: halting' "$start
+^process 1: system call 0x1c of class 1 is not implemented$
+^process 1: killed by SIGSYS$
+$halt"
+
+boot "user fault" "opentala.test=user-fault" '^OpenTala: halting' "$start
+^process 1: page fault at 0x00000001000000[0-9a-f]{2}, address 0x0000000000100000, error 5$
+^process 1: killed by SIGSEGV$
+$halt"
 
 boot "page fault" "opentala.test=page-fault" '^panic: ' "$start
 ^test: writing to 0x0000000040000000$

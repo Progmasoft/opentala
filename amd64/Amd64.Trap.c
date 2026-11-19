@@ -10,6 +10,7 @@
 #include "amd64/Amd64.Pic.h"
 #include "amd64/Amd64.Trap.h"
 #include "kern/Kern.Print.h"
+#include "kern/Kern.Process.h"
 
 #define AMD64_TRAP_BREAKPOINT 3
 #define AMD64_TRAP_PAGE_FAULT 14
@@ -127,10 +128,65 @@ Fatal(const Amd64_Trap_Frame* aIn_pFrame)
                    (unsigned long) aIn_pFrame->errorCode);
 }
 
+/**
+ * @brief The signal an exception of a process sends it, as XNU maps the exception.
+ *
+ * @param[in] aVector The vector, below 32.
+ * @return The signal.
+ */
+static int
+SignalOf(uint64_t aVector)
+{
+        switch(aVector)
+        {
+        case 0:
+        case 16:
+        case 19:
+                return (KERN_SIGNAL_FPE);
+        case 1:
+        case AMD64_TRAP_BREAKPOINT:
+                return (KERN_SIGNAL_TRAP);
+        case 6:
+                return (KERN_SIGNAL_ILL);
+        case 17:
+                return (KERN_SIGNAL_BUS);
+        default:
+                return (KERN_SIGNAL_SEGV);
+        }
+}
+
+/**
+ * @brief An exception in user mode is the process's fault, not the kernel's: it is written out
+ * and the process is killed with its signal.
+ *
+ * @param[in] aIn_pFrame The frame of the exception.
+ */
+__attribute__((noreturn)) static void
+UserFault(const Amd64_Trap_Frame* aIn_pFrame)
+{
+        const char* pName = gskExceptionNames[ aIn_pFrame->vector ];
+
+        if(aIn_pFrame->vector == AMD64_TRAP_PAGE_FAULT)
+                Kern_Print("process %u: page fault at %p, address %p, error %lx\n",
+                           Kern_Process_Id(),
+                           (void*) aIn_pFrame->rip,
+                           (void*) Amd64_Cpu_ReadCr2(),
+                           (unsigned long) aIn_pFrame->errorCode);
+        else
+                Kern_Print("process %u: %s at %p\n",
+                           Kern_Process_Id(),
+                           pName != NULL ? pName : "reserved exception",
+                           (void*) aIn_pFrame->rip);
+        Kern_Process_Kill(SignalOf(aIn_pFrame->vector));
+}
+
 void
 Amd64_Trap_Dispatch(Amd64_Trap_Frame* aIn_pFrame)
 {
         const uint64_t vector = aIn_pFrame->vector;
+
+        if(vector < 32 && (aIn_pFrame->cs & 3) == 3)
+                UserFault(aIn_pFrame);
 
         if(vector == AMD64_TRAP_BREAKPOINT)
         {

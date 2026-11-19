@@ -11,8 +11,14 @@
 #define AMD64_CPU_SELECTOR_CODE 0x08
 /** The kernel's data segment selector. */
 #define AMD64_CPU_SELECTOR_DATA 0x10
+/**
+ * The user data and code selectors, privilege 3 in their low bits. They follow the kernel's in the
+ * order SYSCALL and SYSRET need: user data at the base STAR names plus 8, user code plus 16.
+ */
+#define AMD64_CPU_SELECTOR_USER_DATA 0x1B
+#define AMD64_CPU_SELECTOR_USER_CODE 0x23
 /** The selector of the task state segment. */
-#define AMD64_CPU_SELECTOR_TSS 0x18
+#define AMD64_CPU_SELECTOR_TSS 0x28
 
 /** The interrupt stack table entry, 1 to 7, of the double fault. */
 #define AMD64_CPU_IST_DOUBLE_FAULT 1
@@ -35,6 +41,15 @@
  */
 void
 Amd64_Cpu_Init(void);
+
+/**
+ * @brief Sets the stack the processor switches to when an interrupt or exception comes from user
+ * mode (RSP0 of the task state segment).
+ *
+ * @param[in] aTop The address after the top of the stack, 16-byte aligned.
+ */
+void
+Amd64_Cpu_SetKernelStack(uint64_t aTop);
 
 /**
  * @brief Reads CR2, the address a page fault was about.
