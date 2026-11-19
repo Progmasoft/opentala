@@ -18,26 +18,40 @@ concurrency:
 
 jobs:
   boot:
-    name: Build and boot (amd64, QEMU)
+    name: Build and boot (${{ matrix.arch }}, QEMU)
     runs-on: ubuntu-26.04
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            qemu: qemu-system-x86
+          - arch: arm64
+            qemu: qemu-system-arm
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Install the toolchain and QEMU
+        env:
+          QEMU_PACKAGE: ${{ matrix.qemu }}
         run: |
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends bmake clang lld llvm qemu-system-x86
-          # ld64.lld and llvm-otool live in the versioned LLVM directory.
+          sudo apt-get install --yes --no-install-recommends bmake clang lld llvm "$QEMU_PACKAGE"
+          # ld64.lld, llvm-otool and llvm-nm live in the versioned LLVM directory.
           llvm-config --bindir >> "$GITHUB_PATH"
 
       - name: Build
-        run: bmake
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: bmake ARCH="$ARCH"
 
       - name: Boot in QEMU
-        run: bmake test
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: bmake ARCH="$ARCH" test
 
   format:
     name: Format

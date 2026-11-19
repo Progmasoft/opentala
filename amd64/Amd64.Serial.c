@@ -7,6 +7,7 @@
 
 #include "amd64/Amd64.Port.h"
 #include "amd64/Amd64.Serial.h"
+#include "kern/Kern.Machine.h"
 
 /* The registers of a 16550 UART, as offsets from the port base. */
 #define AMD64_SERIAL_COM1         0x3F8
@@ -73,8 +74,13 @@ Amd64_Serial_Write(const char* aIn_pText)
         }
 }
 
+/**
+ * @brief The console of Kern.Machine.h: COM1, bytes as they are, null characters too.
+ *
+ * @pre Amd64_Serial_Init() has run.
+ */
 void
-Amd64_Serial_WriteBytes(const char* aIn_pBytes, size_t aCount)
+Kern_Machine_ConsoleWrite(const char* aIn_pBytes, size_t aCount)
 {
         for(size_t index = 0; index < aCount; index++)
         {

@@ -6,19 +6,18 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "amd64/Amd64.Paging.h"
-#include "amd64/Amd64.User.h"
+#include "kern/Kern.Machine.h"
 #include "kern/Kern.PageFrames.h"
 #include "kern/Kern.Print.h"
 #include "kern/Kern.Process.h"
 
-/** What Amd64_User_Leave() gives back for a killed process: this bit and the signal. */
+/** What Kern_Machine_Leave() gives back for a killed process: this bit and the signal. */
 #define KERN_PROCESS_KILLED 0x100
 
 /** Where Kern_Process_Run() went into user mode, for the way back. */
-static Amd64_User_tContext gsContext;
-static uint32_t            gsRunning;
-static uint32_t            gsLastId;
+static Kern_Machine_tContext gsContext;
+static uint32_t              gsRunning;
+static uint32_t              gsLastId;
 
 /**
  * @brief Takes a frame and maps it at aVirtual.
@@ -37,7 +36,7 @@ MapNewPage(uint64_t aVirtual, unsigned aFlags)
         /* A fresh page shows the process nothing of what the frame held before. */
         for(unsigned index = 0; index < KERN_PAGE_FRAMES_SIZE; index++)
                 pBytes[ index ] = 0;
-        if(!Amd64_Paging_MapUser(aVirtual, frame, aFlags))
+        if(!Kern_Machine_MapUser(aVirtual, frame, aFlags))
         {
                 Kern_PageFrames_Free(frame);
                 return (0);
@@ -51,11 +50,11 @@ MapProgram(const void* aIn_pProgram, size_t aSize)
 {
         if(aSize > KERN_PAGE_FRAMES_SIZE)
                 Kern_Panic("a program of %lu bytes is over one page", (unsigned long) aSize);
-        const uint64_t text = MapNewPage(KERN_PROCESS_TEXT, AMD64_PAGING_EXECUTABLE);
+        const uint64_t text = MapNewPage(KERN_PROCESS_TEXT, KERN_MACHINE_EXECUTABLE);
 
         if(text == 0)
                 Kern_Panic("no memory for a program");
-        /* The kernel reaches the frame one to one; the process sees the same bytes at its address. */
+        /* The kernel reaches the frame one to one; the process sees it at its own address. */
         uint8_t*       pPage  = (uint8_t*) (uintptr_t) text;
         const uint8_t* pBytes = (const uint8_t*) aIn_pProgram;
 
@@ -63,7 +62,7 @@ MapProgram(const void* aIn_pProgram, size_t aSize)
                 pPage[ index ] = pBytes[ index ];
         for(unsigned page = 1; page <= KERN_PROCESS_STACK_PAGES; page++)
                 if(MapNewPage(KERN_PROCESS_STACK_TOP - (uint64_t) page * KERN_PAGE_FRAMES_SIZE,
-                              AMD64_PAGING_WRITABLE)
+                              KERN_MACHINE_WRITABLE)
                    == 0)
                         Kern_Panic("no memory for a stack");
 }
@@ -76,10 +75,10 @@ Kern_Process_Run(const void* aIn_pProgram, size_t aSize, uint64_t aArgument)
         MapProgram(aIn_pProgram, aSize);
         gsRunning = ++gsLastId;
 
-        const int64_t         ended   = Amd64_User_Enter(&gsContext,
-                                                         KERN_PROCESS_TEXT,
-                                                         KERN_PROCESS_STACK_TOP,
-                                                         aArgument);
+        const int64_t         ended   = Kern_Machine_Enter(&gsContext,
+                                                           KERN_PROCESS_TEXT,
+                                                           KERN_PROCESS_STACK_TOP,
+                                                           aArgument);
         Kern_Process_tOutcome outcome = { gsRunning, 0, 0 };
 
         if((ended & KERN_PROCESS_KILLED) != 0)
@@ -87,7 +86,7 @@ Kern_Process_Run(const void* aIn_pProgram, size_t aSize, uint64_t aArgument)
         else
                 outcome.status = (int) (ended & 0xFF);
         gsRunning = 0;
-        Amd64_Paging_ClearUser();
+        Kern_Machine_ClearUser();
         return (outcome);
 }
 
@@ -102,7 +101,7 @@ Kern_Process_Exit(int aStatus)
 {
         if(gsRunning == 0)
                 Kern_Panic("exit without a process");
-        Amd64_User_Leave(&gsContext, aStatus & 0xFF);
+        Kern_Machine_Leave(&gsContext, aStatus & 0xFF);
 }
 
 void
@@ -110,7 +109,7 @@ Kern_Process_Kill(int aSignal)
 {
         if(gsRunning == 0)
                 Kern_Panic("signal %d without a process", aSignal);
-        Amd64_User_Leave(&gsContext, KERN_PROCESS_KILLED | (aSignal & 0xFF));
+        Kern_Machine_Leave(&gsContext, KERN_PROCESS_KILLED | (aSignal & 0xFF));
 }
 
 const char*

@@ -66,9 +66,15 @@ Kern_PageFrames_Init(void)
 void
 Kern_PageFrames_AddFree(uint64_t aStart, uint64_t aLength)
 {
-        uint64_t first = (aStart + KERN_PAGE_FRAMES_SIZE - 1) / KERN_PAGE_FRAMES_SIZE;
-        uint64_t end   = aLength > UINT64_MAX - aStart ? KERN_PAGE_FRAMES_COUNT
-                                                       : (aStart + aLength) / KERN_PAGE_FRAMES_SIZE;
+        const uint64_t last = aLength > UINT64_MAX - aStart ? UINT64_MAX : aStart + aLength;
+
+        if(last <= KERN_PAGE_FRAMES_BASE)
+                return;
+        if(aStart < KERN_PAGE_FRAMES_BASE)
+                aStart = KERN_PAGE_FRAMES_BASE;
+        uint64_t first = (aStart - KERN_PAGE_FRAMES_BASE + KERN_PAGE_FRAMES_SIZE - 1)
+                / KERN_PAGE_FRAMES_SIZE;
+        uint64_t end = (last - KERN_PAGE_FRAMES_BASE) / KERN_PAGE_FRAMES_SIZE;
 
         if(end > KERN_PAGE_FRAMES_COUNT)
                 end = KERN_PAGE_FRAMES_COUNT;
@@ -79,12 +85,17 @@ Kern_PageFrames_AddFree(uint64_t aStart, uint64_t aLength)
 void
 Kern_PageFrames_Reserve(uint64_t aStart, uint64_t aLength)
 {
-        if(aLength == 0)
+        const uint64_t last = aLength > UINT64_MAX - aStart ? UINT64_MAX : aStart + aLength;
+
+        if(aLength == 0 || last <= KERN_PAGE_FRAMES_BASE)
                 return;
-        uint64_t first = aStart / KERN_PAGE_FRAMES_SIZE;
-        uint64_t end   = aLength > UINT64_MAX - aStart
+        if(aStart < KERN_PAGE_FRAMES_BASE)
+                aStart = KERN_PAGE_FRAMES_BASE;
+        uint64_t first = (aStart - KERN_PAGE_FRAMES_BASE) / KERN_PAGE_FRAMES_SIZE;
+        uint64_t end   = last - KERN_PAGE_FRAMES_BASE > UINT64_MAX - KERN_PAGE_FRAMES_SIZE
                 ? KERN_PAGE_FRAMES_COUNT
-                : (aStart + aLength + KERN_PAGE_FRAMES_SIZE - 1) / KERN_PAGE_FRAMES_SIZE;
+                : (last - KERN_PAGE_FRAMES_BASE + KERN_PAGE_FRAMES_SIZE - 1)
+                        / KERN_PAGE_FRAMES_SIZE;
 
         if(end > KERN_PAGE_FRAMES_COUNT)
                 end = KERN_PAGE_FRAMES_COUNT;
@@ -105,7 +116,7 @@ Kern_PageFrames_Allocate(uint64_t* aOut_pAddress)
 
                 SetInUse(frame, true);
                 gsNextWord     = word;
-                *aOut_pAddress = frame * KERN_PAGE_FRAMES_SIZE;
+                *aOut_pAddress = KERN_PAGE_FRAMES_BASE + frame * KERN_PAGE_FRAMES_SIZE;
                 return (true);
         }
         return (false);
@@ -114,9 +125,10 @@ Kern_PageFrames_Allocate(uint64_t* aOut_pAddress)
 void
 Kern_PageFrames_Free(uint64_t aAddress)
 {
-        const uint64_t frame = aAddress / KERN_PAGE_FRAMES_SIZE;
+        const uint64_t frame = (aAddress - KERN_PAGE_FRAMES_BASE) / KERN_PAGE_FRAMES_SIZE;
 
-        if(aAddress % KERN_PAGE_FRAMES_SIZE != 0 || frame >= KERN_PAGE_FRAMES_COUNT)
+        if(aAddress % KERN_PAGE_FRAMES_SIZE != 0 || aAddress < KERN_PAGE_FRAMES_BASE
+           || frame >= KERN_PAGE_FRAMES_COUNT)
                 Kern_Panic("freeing %p, which is not a page frame", (void*) aAddress);
         if(!IsInUse(frame))
                 Kern_Panic("freeing the page frame %p twice", (void*) aAddress);

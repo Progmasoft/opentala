@@ -6,8 +6,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "amd64/Amd64.Paging.h"
-#include "amd64/Amd64.Serial.h"
+#include "kern/Kern.Machine.h"
 #include "kern/Kern.Print.h"
 #include "kern/Kern.Process.h"
 #include "kern/Kern.SystemCalls.h"
@@ -62,9 +61,9 @@ Write(const uint64_t* aIn_pArguments)
                         : KERN_SYSTEM_CALLS_CHUNK;
 
                 /* Nothing is written from a buffer the process cannot read itself. */
-                if(!Amd64_Paging_CopyIn(chunk, buffer + done, (size_t) size))
+                if(!Kern_Machine_CopyIn(chunk, buffer + done, (size_t) size))
                         return (done == 0 ? Result(KERN_ERRNO_FAULT, 0) : Result(0, done));
-                Amd64_Serial_WriteBytes(chunk, (size_t) size);
+                Kern_Machine_ConsoleWrite(chunk, (size_t) size);
                 done += size;
         }
         return (Result(0, length));

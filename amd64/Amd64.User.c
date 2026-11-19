@@ -6,8 +6,8 @@
 #include <stdint.h>
 
 #include "amd64/Amd64.Cpu.h"
-#include "amd64/Amd64.Paging.h"
 #include "amd64/Amd64.User.h"
+#include "kern/Kern.Machine.h"
 #include "kern/Kern.Print.h"
 #include "kern/Kern.Process.h"
 #include "kern/Kern.SystemCalls.h"
@@ -62,7 +62,7 @@ ReadMsr(uint32_t aMsr)
 }
 
 void
-Amd64_User_Init(void)
+Kern_Machine_InitUser(void)
 {
         gAmd64_User_KernelStackTop = (uint64_t) (uintptr_t) (gsKernelStack + AMD64_USER_STACK_SIZE);
         Amd64_Cpu_SetKernelStack(gAmd64_User_KernelStackTop);
@@ -86,7 +86,7 @@ Amd64_User_Init(void)
 static int
 IsUserAddress(uint64_t aAddress)
 {
-        return (aAddress >= AMD64_PAGING_USER_START && aAddress < AMD64_PAGING_USER_END);
+        return (aAddress >= KERN_MACHINE_USER_START && aAddress < KERN_MACHINE_USER_END);
 }
 
 void
