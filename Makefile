@@ -31,8 +31,12 @@ KLDFLAGS=	-arch x86_64 -platform_version macos 11.0 11.0 -pagezero_size 0x100000
 		-e Amd64_Boot_Entry64
 
 # The boot code comes first: its __text holds the Multiboot header.
-SRCS=		amd64/Amd64.Boot.S amd64/Amd64.Serial.c kern/Kern.Main.c
-HDRS=		amd64/Amd64.Port.h amd64/Amd64.Serial.h kern/Kern.Main.h
+SRCS=		amd64/Amd64.Boot.S amd64/Amd64.Traps.S amd64/Amd64.Cpu.c amd64/Amd64.Pic.c \
+		amd64/Amd64.Serial.c amd64/Amd64.Timer.c amd64/Amd64.Trap.c kern/Kern.Main.c \
+		kern/Kern.PageFrames.c kern/Kern.Print.c
+HDRS=		amd64/Amd64.Cpu.h amd64/Amd64.Multiboot.h amd64/Amd64.Pic.h amd64/Amd64.Port.h \
+		amd64/Amd64.Serial.h amd64/Amd64.Timer.h amd64/Amd64.Trap.h kern/Kern.Main.h \
+		kern/Kern.PageFrames.h kern/Kern.Print.h
 OBJS=
 
 all: ${KERNEL}
