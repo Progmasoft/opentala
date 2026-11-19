@@ -55,8 +55,12 @@ MapProgram(const void* aIn_pProgram, size_t aSize)
 
         if(text == 0)
                 Kern_Panic("no memory for a program");
+        /* The kernel reaches the frame one to one; the process sees the same bytes at its address. */
+        uint8_t*       pPage  = (uint8_t*) (uintptr_t) text;
+        const uint8_t* pBytes = (const uint8_t*) aIn_pProgram;
+
         for(size_t index = 0; index < aSize; index++)
-                ((uint8_t*) (uintptr_t) text)[ index ] = ((const uint8_t*) aIn_pProgram)[ index ];
+                pPage[ index ] = pBytes[ index ];
         for(unsigned page = 1; page <= KERN_PROCESS_STACK_PAGES; page++)
                 if(MapNewPage(KERN_PROCESS_STACK_TOP - (uint64_t) page * KERN_PAGE_FRAMES_SIZE,
                               AMD64_PAGING_WRITABLE)
