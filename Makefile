@@ -24,10 +24,12 @@ KERNEL=		${OBJ}/opentala
 COMMON_CFLAGS=	-std=gnu99 -ffreestanding -fno-builtin -nostdlib -nostdlibinc -fno-stack-protector \
 		-fno-asynchronous-unwind-tables -fno-unwind-tables -O2 -g -Wall -Wextra -Werror -I.
 
-KERN_SRCS=	kern/Kern.DeviceTree.c kern/Kern.Main.c kern/Kern.PageFrames.c kern/Kern.Print.c \
-		kern/Kern.Process.c kern/Kern.SystemCalls.c
-KERN_HDRS=	kern/Kern.Boot.h kern/Kern.DeviceTree.h kern/Kern.Machine.h kern/Kern.PageFrames.h \
-		kern/Kern.Print.h kern/Kern.Process.h kern/Kern.SystemCalls.h
+KERN_SRCS=	kern/Kern.DeviceTree.c kern/Kern.Main.c kern/Kern.Memory.c kern/Kern.PageFrames.c \
+		kern/Kern.Print.c kern/Kern.Process.c kern/Kern.SystemCalls.c \
+		ipc/Ipc.Message.c ipc/Ipc.Port.c ipc/Ipc.Space.c ipc/Ipc.Traps.c
+KERN_HDRS=	kern/Kern.Boot.h kern/Kern.DeviceTree.h kern/Kern.Machine.h kern/Kern.Memory.h \
+		kern/Kern.PageFrames.h kern/Kern.Print.h kern/Kern.Process.h kern/Kern.SystemCalls.h \
+		ipc/Ipc.Mach.h ipc/Ipc.Message.h ipc/Ipc.Port.h ipc/Ipc.Space.h ipc/Ipc.Traps.h
 
 # The boot code comes first: on amd64 its __text holds the Multiboot header.
 AMD64_SRCS=	amd64/Amd64.Boot.S amd64/Amd64.Traps.S amd64/Amd64.UserEntry.S \

@@ -18,10 +18,10 @@
 /** The class of a system call, the high byte of RAX on amd64. */
 typedef enum Kern_SystemCalls_Class
 {
-        Kern_SystemCalls_Class_Mach             = 1,
-        Kern_SystemCalls_Class_Bsd              = 2,
-        Kern_SystemCalls_Class_MachineDependent = 3,
-        Kern_SystemCalls_Class_Diagnostics      = 4,
+        Kern_SystemCalls_kMach             = 1,
+        Kern_SystemCalls_kBsd              = 2,
+        Kern_SystemCalls_kMachineDependent = 3,
+        Kern_SystemCalls_kDiagnostics      = 4,
 } Kern_SystemCalls_tClass;
 
 /** How many arguments come in registers. */

@@ -181,6 +181,54 @@ IsUserReadable(uint64_t aVirtual)
         }
 }
 
+/**
+ * @brief Whether a user page is mapped for EL0 and not read-only.
+ *
+ * @param[in] aVirtual The page's address.
+ * @return Whether it is.
+ */
+static bool
+IsUserWritable(uint64_t aVirtual)
+{
+        const uint64_t* pTable = gsLevel0;
+
+        for(unsigned shift = 39;; shift -= 9)
+        {
+                const uint64_t entry = pTable[ IndexOf(aVirtual, shift) ];
+
+                if(shift == 12)
+                        return ((entry & ARM64_PAGING_TYPE_MASK) == ARM64_PAGING_PAGE_ENTRY
+                                && (entry & ARM64_PAGING_EL0) != 0
+                                && (entry & ARM64_PAGING_READ_ONLY) == 0);
+                if((entry & ARM64_PAGING_TYPE_MASK) != ARM64_PAGING_TABLE)
+                        return (false);
+                pTable = (const uint64_t*) (uintptr_t) (entry & ARM64_PAGING_ADDRESS);
+        }
+}
+
+bool
+Kern_Machine_CopyOut(uint64_t aDestination, const void* aIn_pSource, size_t aLength)
+{
+        const uint8_t* pSource = aIn_pSource;
+
+        if(aLength == 0)
+                return (true);
+        if(aDestination < KERN_MACHINE_USER_START || aDestination >= KERN_MACHINE_USER_END
+           || aLength > KERN_MACHINE_USER_END - aDestination)
+                return (false);
+        for(uint64_t page = aDestination & ~(ARM64_PAGING_PAGE - 1); page < aDestination + aLength;
+            page         += ARM64_PAGING_PAGE)
+                if(!IsUserWritable(page))
+                        return (false);
+        /* STTRB stores with EL0's permissions: PAN stays on, and the MMU checks it again. */
+        for(size_t index = 0; index < aLength; index++)
+                __asm__ volatile("sttrb %w0, [%1]"
+                                 :
+                                 : "r"((uint32_t) pSource[index]), "r"(aDestination + index)
+                                 : "memory");
+        return (true);
+}
+
 bool
 Kern_Machine_CopyIn(void* aOut_pDestination, uint64_t aSource, size_t aLength)
 {

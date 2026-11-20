@@ -121,6 +121,17 @@ bool
 Kern_Machine_CopyIn(void* aOut_pDestination, uint64_t aSource, size_t aLength);
 
 /**
+ * @brief Copies to user memory, after checking that every byte is writable from user mode.
+ *
+ * @param[in] aDestination The user address.
+ * @param[in] aIn_pSource  The kernel buffer.
+ * @param[in] aLength      How many bytes.
+ * @return false, with nothing copied, when part of the range is not writable from user mode.
+ */
+bool
+Kern_Machine_CopyOut(uint64_t aDestination, const void* aIn_pSource, size_t aLength);
+
+/**
  * @brief Unmaps every user page and gives its frame and the tables' frames back.
  */
 void

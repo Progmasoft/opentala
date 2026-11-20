@@ -55,8 +55,9 @@ and halts. A fault it does not expect writes the registers and ends in a panic t
 OpenTala: amd64, 64-bit mode
 OpenTala: loaded by Multiboot
 traps: breakpoint handled and resumed
-memory: 127 MiB usable, 32442 page frames free
+memory: 127 MiB usable, 32439 page frames free
 memory: allocator checked
+memory: heap checked
 timer: 10 ticks at 100 Hz
 paging: no-execute on, SMEP on, SMAP on
 user: system calls through SYSCALL, back through IRETQ
@@ -70,7 +71,10 @@ The line `user: hello from user mode` is written by a process in user mode throu
 On the command line (`-append` in QEMU), `opentala.test=page-fault` writes to an unmapped address and
 `opentala.test=double-fault` pushes to an unmapped stack, each ending in a panic; `opentala.test=unknown-system-call`
 and `opentala.test=mach-trap` make the process call what OpenTala does not have, and `opentala.test=user-fault`
-makes it read the kernel's memory, each killing only the process. `bmake test` boots all six ways.
+makes it read the kernel's memory, each killing only the process. `opentala.test=mach-ipc` makes it use Mach IPC
+through the traps libSystem calls: it allocates a port, inserts a send right, sends a message and receives it,
+answers a request through a send-once right to a reply port, kills a port and finds its name dead, and leaves a
+message queued, which the kernel destroys with the process. `bmake test` boots all seven ways.
 
 On arm64 it boots on QEMU's virt machine (`bmake ARCH=arm64 run`) through the header of an arm64 Linux Image, so
 QEMU's `-kernel` and other loaders of such images start it with the device tree, at EL2 or EL1. It drops to EL1, turns
@@ -82,8 +86,9 @@ same process in EL0 through `svc #0x80` with the number in X16:
 OpenTala: arm64, EL1
 OpenTala: loaded by a device tree
 traps: breakpoint handled and resumed
-memory: 128 MiB usable, 32480 page frames free
+memory: 128 MiB usable, 32476 page frames free
 memory: allocator checked
+memory: heap checked
 timer: 10 ticks at 100 Hz
 paging: execute-never, PAN on
 user: system calls through SVC #0x80, back through ERET
@@ -93,7 +98,7 @@ process 1: every page given back
 OpenTala: halting
 ```
 
-`bmake ARCH=arm64 test` boots it the same five ways as amd64, the double fault aside, which arm64 does not have.
+`bmake ARCH=arm64 test` boots it the same six ways as amd64, the double fault aside, which arm64 does not have.
 
 The kernel is a Mach-O executable whose `__TEXT` segment starts at 1 MiB. Its Multiboot header gives the load
 addresses itself, so a Multiboot loader copies the file without reading Mach-O.

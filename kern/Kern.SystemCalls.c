@@ -6,6 +6,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "ipc/Ipc.Traps.h"
 #include "kern/Kern.Machine.h"
 #include "kern/Kern.Print.h"
 #include "kern/Kern.Process.h"
@@ -69,22 +70,32 @@ Write(const uint64_t* aIn_pArguments)
         return (Result(0, length));
 }
 
-static const Kern_SystemCalls_tFn gskBsd[ KERN_SYSTEM_CALLS_BSD_COUNT ] = {
+static const Kern_SystemCalls_tFn gsBsd[ KERN_SYSTEM_CALLS_BSD_COUNT ] = {
         [KERN_SYSTEM_CALLS_EXIT]  = Exit,
         [KERN_SYSTEM_CALLS_WRITE] = Write,
 };
 
-/** No Mach trap is implemented yet; the table has XNU's length so the numbers stay XNU's. */
-static const Kern_SystemCalls_tFn gskMach[ KERN_SYSTEM_CALLS_MACH_COUNT ];
+/** The Mach traps of IPC; the table has XNU's length, so the numbers stay XNU's. */
+static const Kern_SystemCalls_tFn gsMach[ KERN_SYSTEM_CALLS_MACH_COUNT ] = {
+        [IPC_TRAPS_PORT_ALLOCATE]     = Ipc_Traps_PortAllocate,
+        [IPC_TRAPS_PORT_DEALLOCATE]   = Ipc_Traps_PortDeallocate,
+        [IPC_TRAPS_PORT_MOD_REFS]     = Ipc_Traps_PortModRefs,
+        [IPC_TRAPS_PORT_INSERT_RIGHT] = Ipc_Traps_PortInsertRight,
+        [IPC_TRAPS_REPLY_PORT]        = Ipc_Traps_ReplyPort,
+        [IPC_TRAPS_THREAD_SELF]       = Ipc_Traps_ThreadSelf,
+        [IPC_TRAPS_TASK_SELF]         = Ipc_Traps_TaskSelf,
+        [IPC_TRAPS_HOST_SELF]         = Ipc_Traps_HostSelf,
+        [IPC_TRAPS_MSG]               = Ipc_Traps_Msg,
+};
 
 /** The function of a class and number, or NULL. */
 static Kern_SystemCalls_tFn
 Find(Kern_SystemCalls_tClass aClass, uint32_t aNumber)
 {
-        if(aClass == Kern_SystemCalls_Class_Bsd && aNumber < KERN_SYSTEM_CALLS_BSD_COUNT)
-                return (gskBsd[ aNumber ]);
-        if(aClass == Kern_SystemCalls_Class_Mach && aNumber < KERN_SYSTEM_CALLS_MACH_COUNT)
-                return (gskMach[ aNumber ]);
+        if(aClass == Kern_SystemCalls_kBsd && aNumber < KERN_SYSTEM_CALLS_BSD_COUNT)
+                return (gsBsd[ aNumber ]);
+        if(aClass == Kern_SystemCalls_kMach && aNumber < KERN_SYSTEM_CALLS_MACH_COUNT)
+                return (gsMach[ aNumber ]);
         return (NULL);
 }
 

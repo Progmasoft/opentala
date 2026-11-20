@@ -204,6 +204,54 @@ IsUserReadable(uint64_t aVirtual)
         }
 }
 
+/**
+ * @brief Whether a user page is present and writable from user mode: every level must allow both.
+ *
+ * @param[in] aVirtual The page's address.
+ * @return Whether it is.
+ */
+static bool
+IsUserWritable(uint64_t aVirtual)
+{
+        const uint64_t* pTable = gsPml4;
+        const uint64_t  needs  = AMD64_PAGING_PRESENT | AMD64_PAGING_USER | AMD64_PAGING_WRITE;
+
+        for(unsigned shift = 39;; shift -= 9)
+        {
+                const uint64_t entry = pTable[ IndexOf(aVirtual, shift) ];
+
+                if((entry & needs) != needs)
+                        return (false);
+                if(shift == 12)
+                        return (true);
+                if((entry & AMD64_PAGING_LARGE) != 0)
+                        return (false);
+                pTable = (const uint64_t*) (uintptr_t) (entry & AMD64_PAGING_ADDRESS);
+        }
+}
+
+bool
+Kern_Machine_CopyOut(uint64_t aDestination, const void* aIn_pSource, size_t aLength)
+{
+        if(aLength == 0)
+                return (true);
+        if(aDestination < KERN_MACHINE_USER_START || aDestination >= KERN_MACHINE_USER_END
+           || aLength > KERN_MACHINE_USER_END - aDestination)
+                return (false);
+        for(uint64_t page = aDestination & ~(AMD64_PAGING_PAGE - 1); page < aDestination + aLength;
+            page         += AMD64_PAGING_PAGE)
+                if(!IsUserWritable(page))
+                        return (false);
+        if(gsHasSmap)
+                __asm__ volatile("stac" : : : "memory");
+        for(size_t index = 0; index < aLength; index++)
+                ((volatile uint8_t*) (uintptr_t) aDestination)[ index ] = ((
+                        const uint8_t*) aIn_pSource)[ index ];
+        if(gsHasSmap)
+                __asm__ volatile("clac" : : : "memory");
+        return (true);
+}
+
 bool
 Kern_Machine_CopyIn(void* aOut_pDestination, uint64_t aSource, size_t aLength)
 {
