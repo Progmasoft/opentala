@@ -7,8 +7,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "ipc/Ipc.Port.h"
 #include "kern/Kern.Boot.h"
 #include "kern/Kern.Machine.h"
+#include "kern/Kern.Memory.h"
 #include "kern/Kern.PageFrames.h"
 #include "kern/Kern.Print.h"
 #include "kern/Kern.Process.h"
@@ -189,8 +191,9 @@ CheckTimer(void)
  *
  * The command line picks what the program does: by default it writes a line and checks the errors
  * of write; `opentala.test=unknown-system-call` and `opentala.test=mach-trap` make a system call
- * OpenTala does not have, and `opentala.test=user-fault` reads kernel memory. Each must end the
- * process, and only the process.
+ * OpenTala does not have, `opentala.test=user-fault` reads kernel memory, and
+ * `opentala.test=mach-ipc` checks Mach's ports and messages. Each must end the process, and only the
+ * process, and leave no page, block of the heap or port behind.
  *
  * @param[in] aIn_pCommandLine The command line, or NULL.
  */
@@ -201,6 +204,7 @@ RunUserProgram(const char* aIn_pCommandLine)
                 "opentala.test=unknown-system-call",
                 "opentala.test=mach-trap",
                 "opentala.test=user-fault",
+                "opentala.test=mach-ipc",
         };
         uint64_t argument = 0;
 
@@ -222,6 +226,10 @@ RunUserProgram(const char* aIn_pCommandLine)
         if(Kern_PageFrames_FreeCount() != before)
                 Kern_Panic("the process kept %ld page frames",
                            (long) (before - Kern_PageFrames_FreeCount()));
+        if(Kern_Memory_InUse() != 0 || Ipc_Port_Alive() != 0)
+                Kern_Panic("the process kept %lu blocks of the heap and %lu ports",
+                           (unsigned long) Kern_Memory_InUse(),
+                           (unsigned long) Ipc_Port_Alive());
         Kern_Print("process %u: every page given back\n", outcome.id);
 }
 
@@ -238,6 +246,7 @@ Kern_Main(const Kern_Boot_tInformation* aIn_pInformation)
 
         ReadMemory(aIn_pInformation);
         CheckPageFrames();
+        Kern_Memory_Check();
         CheckTimer();
         Kern_Machine_InitPaging();
         Kern_Machine_InitUser();

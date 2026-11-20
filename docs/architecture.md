@@ -9,7 +9,8 @@
 | --- | --- |
 | `amd64/` | What is particular to amd64: the boot code, the processor's tables, the trap stubs, the PIC, the timer, the serial port, its page tables and the SYSCALL entry |
 | `arm64/` | What is particular to arm64: the boot code, the exception vectors, the GICv2 and the generic timer, the PL011, its page tables and the SVC entry |
-| `kern/` | What does not depend on the machine: the kernel's main code, the device tree, its console and panic, the page frame allocator, processes and system calls |
+| `kern/` | What does not depend on the machine: the kernel's main code, the device tree, its console and panic, the page frame allocator, the heap, processes and system calls |
+| `ipc/` | Mach IPC: ports, the spaces that name them, messages and the Mach traps of IPC |
 | `tools/` | Scripts the build uses, such as the QEMU boot test |
 
 Files are named `<Part>.<Subject>`, as `Amd64.Boot.S` and `Kern.Main.c`.
@@ -73,6 +74,33 @@ every frame in use; `Kern.Main.c` frees what the Multiboot memory map calls avai
 the kernel image (`segment$start$__TEXT` to `segment$end$__DATA`) and the loader's structures. Allocation goes on from
 where the last one stopped; freeing a frame that is not in use panics, since it would give one frame to two owners.
 
+`Kern.Memory.c` is the kernel's heap: blocks of 32 to 2048 bytes in powers of two, and blocks of a whole page less
+its header, every block aligned to 16 bytes and filled with zeros. A page holds blocks of one size and starts with a
+header that names it, so a block finds its page by its address. When the last block of a page is freed, the frame
+goes back to the page frame allocator, so the heap keeps nothing it does not use, and `Kern.Main.c` checks after each
+process that no block is left. A freed block carries a mark, so freeing it twice panics.
+
+## Mach IPC
+
+| File | What it does |
+| --- | --- |
+| `Ipc.Mach.h` | Mach's values with XNU's numbers: `kern_return_t`, rights, dispositions, `msgh_bits`, `mach_msg` options and returns, the header and the trailer. |
+| `Ipc.Port.c` | Ports: a queue of at most five messages and one receive right. A port is kept while a name, a right in a message or its receive right refers to it; when the receive right is destroyed it dies, and its queue is destroyed. The host's port lives as long as the kernel; a task's and a thread's die with the task. |
+| `Ipc.Space.c` | A task's space: 127 names, `(index << 8) \| generation`, each naming one port and the rights to it: a receive right and send rights under one name, counted by user references, a send-once right under a name of its own, or a dead name, what a send right becomes when its port dies. The generation changes when a name is freed, so an old name names nothing. Destroying a space destroys its receive rights, so their ports die, and gives back every other right. |
+| `Ipc.Message.c` | `mach_msg`: a header and a body of at most 2048 bytes, copied in whole; the destination and reply rights are taken from the sender's space by their dispositions (`COPY_SEND`, `MOVE_SEND`, `MAKE_SEND`, `MAKE_SEND_ONCE`, `MOVE_SEND_ONCE`); on receive the reply right goes into the receiver's space and the header gives its name, and an 8-byte trailer follows the body. A message too large for the buffer is destroyed, or kept with `MACH_RCV_LARGE`, its size written where the buffer's header has `msgh_size`. |
+| `Ipc.Traps.c` | The traps, with XNU's numbers: `_kernelrpc_mach_port_allocate_trap` (16), `_deallocate_trap` (18), `_mod_refs_trap` (19) and `_insert_right_trap` (21), which libSystem calls instead of MIG messages; `mach_reply_port` (26), `thread_self_trap` (27), `task_self_trap` (28), `host_self_trap` (29) and `mach_msg_trap` (31). The target task of a port call must be the caller's own; any other is `MACH_SEND_INVALID_DEST`, as XNU answers. |
+
+Each process has a space, made before it starts and destroyed when it ends. `Kern_Machine_CopyOut` writes to user
+memory as `Kern_Machine_CopyIn` reads it: only to pages user mode may write, between STAC and CLAC on amd64 and with
+STTRB, EL0's permissions, on arm64.
+
+What OpenTala does not do: it takes no descriptors, so a complex message is refused with `MACH_SEND_INVALID_TYPE`,
+and a voucher with `MACH_SEND_INVALID_VOUCHER`; it has no port sets and moves no receive right in a message; its
+kernel ports take no message (`MACH_SEND_INVALID_DEST`). A task has one thread, so nothing can wake a send that
+would wait for room in a full queue or a receive that would wait for a message: they end with `MACH_SEND_TIMED_OUT`
+and `MACH_RCV_TIMED_OUT`, as with a timeout of 0. `mach_msg_trap` reads its first six arguments; the seventh, the
+notify port, is not read.
+
 ## User mode and system calls
 
 | File | What it does |
@@ -82,9 +110,9 @@ where the last one stopped; freeing a frame that is not in use panics, since it 
 | `Amd64.UserEntry.S` | The SYSCALL entry: it moves to the kernel stack, builds the frame of the trap stubs and returns with IRETQ, not SYSRET, which faults in kernel mode on the user's stack when the return address is not canonical (CVE-2012-0217 on Intel). `Kern_Machine_Enter` goes into user mode with every register but the argument zeroed; `Kern_Machine_Leave` comes back to it when the process ends. |
 | `Amd64.User.c` | SYSCALL's MSRs (EFER.SCE, STAR, LSTAR, FMASK, which turns interrupts, the trap flag, the direction flag and AC off on entry), and the system call: Darwin's class in bits 24 to 31 of RAX, the arguments in RDI, RSI, RDX, R10, R8, R9; a BSD error sets the carry flag with the errno value in RAX. The flags given back are only those user mode may hold. |
 | `Amd64.Trap.c` | An exception in user mode kills the process with the signal XNU gives it (SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGTRAP), and the kernel goes on. |
-| `Kern.SystemCalls.c` | The BSD table, with XNU's numbers (`exit` 1, `write` 4), and the Mach trap table, with XNU's 128 entries and none implemented yet. A class or number without a function kills the process with SIGSYS, as XNU does. |
+| `Kern.SystemCalls.c` | The BSD table, with XNU's numbers (`exit` 1, `write` 4), and the Mach trap table, with XNU's 128 entries and the traps of IPC. A class or number without a function kills the process with SIGSYS, as XNU does. |
 | `Kern.Process.c` | One process at a time: its program in a read-only, executable page at 4 GiB, a stack of four writable, non-executable pages below `0x7FF7C0000000`, and every page and table given back when it ends. |
-| `Amd64.UserProgram.S`, `Arm64.UserProgram.S` | The test program: it writes a line, checks that `write` gives EBADF and EFAULT with the carry flag, and exits; the command line can make it call what does not exist or read the kernel's memory. |
+| `Amd64.UserProgram.S`, `Arm64.UserProgram.S` | The test program: it writes a line, checks that `write` gives EBADF and EFAULT with the carry flag, and exits; the command line can make it call what does not exist, read the kernel's memory, or check Mach IPC through its traps. |
 
 ## Console
 

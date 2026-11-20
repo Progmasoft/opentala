@@ -55,6 +55,14 @@ Kern_Process_tOutcome
 Kern_Process_Run(const void* aIn_pProgram, size_t aSize, uint64_t aArgument);
 
 /**
+ * @brief The Mach space of the process running: its names and rights.
+ *
+ * @return The space; a process always has one.
+ */
+struct Ipc_Space_Space*
+Kern_Process_Space(void);
+
+/**
  * @brief The id of the process running, or 0 when there is none.
  *
  * @return The id.

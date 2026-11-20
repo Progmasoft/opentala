@@ -17,7 +17,7 @@
 #define AMD64_TRAP_IRQS       16
 
 /** The names of the exceptions, by vector; reserved vectors have none. */
-static const char* const gskExceptionNames[ 32 ] = {
+static const char* const gsExceptionNames[ 32 ] = {
         "divide error",
         "debug",
         "non-maskable interrupt",
@@ -112,8 +112,7 @@ WriteRegisters(const Amd64_Trap_Frame* aIn_pFrame)
 __attribute__((noreturn)) static void
 Fatal(const Amd64_Trap_Frame* aIn_pFrame)
 {
-        const char* pName = aIn_pFrame->vector < 32 ? gskExceptionNames[ aIn_pFrame->vector ]
-                                                    : NULL;
+        const char* pName = aIn_pFrame->vector < 32 ? gsExceptionNames[ aIn_pFrame->vector ] : NULL;
 
         WriteRegisters(aIn_pFrame);
         if(aIn_pFrame->vector == AMD64_TRAP_PAGE_FAULT)
@@ -164,7 +163,7 @@ SignalOf(uint64_t aVector)
 __attribute__((noreturn)) static void
 UserFault(const Amd64_Trap_Frame* aIn_pFrame)
 {
-        const char* pName = gskExceptionNames[ aIn_pFrame->vector ];
+        const char* pName = gsExceptionNames[ aIn_pFrame->vector ];
 
         if(aIn_pFrame->vector == AMD64_TRAP_PAGE_FAULT)
                 Kern_Print("process %u: page fault at %p, address %p, error %lx\n",

@@ -6,6 +6,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "ipc/Ipc.Space.h"
 #include "kern/Kern.Machine.h"
 #include "kern/Kern.PageFrames.h"
 #include "kern/Kern.Print.h"
@@ -18,6 +19,7 @@
 static Kern_Machine_tContext gsContext;
 static uint32_t              gsRunning;
 static uint32_t              gsLastId;
+static Ipc_Space_tSpace*     gspSpace;
 
 /**
  * @brief Takes a frame and maps it at aVirtual.
@@ -73,6 +75,9 @@ Kern_Process_Run(const void* aIn_pProgram, size_t aSize, uint64_t aArgument)
         if(gsRunning != 0)
                 Kern_Panic("process %u is running already", gsRunning);
         MapProgram(aIn_pProgram, aSize);
+        gspSpace = Ipc_Space_Create();
+        if(gspSpace == NULL)
+                Kern_Panic("no memory for a Mach space");
         gsRunning = ++gsLastId;
 
         const int64_t         ended   = Kern_Machine_Enter(&gsContext,
@@ -86,8 +91,19 @@ Kern_Process_Run(const void* aIn_pProgram, size_t aSize, uint64_t aArgument)
         else
                 outcome.status = (int) (ended & 0xFF);
         gsRunning = 0;
+        /* Its receive rights die with it, and every right it held is given back. */
+        Ipc_Space_Destroy(gspSpace);
+        gspSpace = NULL;
         Kern_Machine_ClearUser();
         return (outcome);
+}
+
+struct Ipc_Space_Space*
+Kern_Process_Space(void)
+{
+        if(gspSpace == NULL)
+                Kern_Panic("a Mach trap without a process");
+        return (gspSpace);
 }
 
 uint32_t

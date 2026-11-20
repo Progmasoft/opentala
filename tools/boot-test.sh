@@ -16,6 +16,9 @@
 #     exits, and the kernel halts;
 #   - with opentala.test=unknown-system-call or mach-trap, the process is killed by SIGSYS;
 #   - with opentala.test=user-fault, its read of kernel memory kills it with SIGSEGV;
+#   - with opentala.test=mach-ipc, it allocates ports, sends and receives messages, answers a
+#     request through a send-once right, and kills a port, through Mach's traps, and exits with 0;
+#     the kernel then finds no block of its heap and no port left;
 #   - with opentala.test=page-fault, the kernel writes to an unmapped address and panics, naming
 #     the fault and the address;
 #   - on amd64, with opentala.test=double-fault, a push to an unmapped stack ends in a panic that
@@ -152,6 +155,7 @@ start="$start
 ^traps: breakpoint handled and resumed$
 $memory
 ^memory: allocator checked$
+^memory: heap checked$
 ^timer: 10 ticks at 100 Hz$
 $protection"
 halt='^process 1: every page given back$
@@ -168,8 +172,13 @@ boot "unknown system call" "opentala.test=unknown-system-call" '^OpenTala: halti
 $halt"
 
 boot "Mach trap" "opentala.test=mach-trap" '^OpenTala: halting' "$start
-^process 1: system call 0x1c of class 1 is not implemented$
+^process 1: system call 0x64 of class 1 is not implemented$
 ^process 1: killed by SIGSYS$
+$halt"
+
+boot "Mach IPC" "opentala.test=mach-ipc" '^OpenTala: halting' "$start
+^user: Mach IPC checked$
+^process 1: exited with status 0$
 $halt"
 
 boot "user fault" "opentala.test=user-fault" '^OpenTala: halting' "$start

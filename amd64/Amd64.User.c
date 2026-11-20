@@ -106,7 +106,7 @@ Amd64_User_SystemCall(Amd64_Trap_Frame* aInOut_pFrame)
         uint64_t flags = (aInOut_pFrame->rflags & AMD64_USER_FLAGS_OWN) | AMD64_USER_FLAG_RESERVED
                 | AMD64_USER_FLAG_INTERRUPT;
 
-        if(kind == Kern_SystemCalls_Class_Bsd)
+        if(kind == Kern_SystemCalls_kBsd)
         {
                 /* Darwin's BSD convention: the carry flag and the errno value on an error. */
                 flags &= ~AMD64_USER_FLAG_CARRY;

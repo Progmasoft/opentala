@@ -39,19 +39,19 @@ Decode(int64_t aRegister, Kern_SystemCalls_tClass* aOut_pClass, uint32_t* aOut_p
 {
         if(aRegister == ARM64_USER_MACHINE_DEPENDENT)
         {
-                *aOut_pClass  = Kern_SystemCalls_Class_MachineDependent;
+                *aOut_pClass  = Kern_SystemCalls_kMachineDependent;
                 *aOut_pNumber = 0;
                 return (1);
         }
         if(aRegister > 0 && aRegister < ARM64_USER_NUMBER_LIMIT)
         {
-                *aOut_pClass  = Kern_SystemCalls_Class_Bsd;
+                *aOut_pClass  = Kern_SystemCalls_kBsd;
                 *aOut_pNumber = (uint32_t) aRegister;
                 return (1);
         }
         if(aRegister < 0 && aRegister > -ARM64_USER_NUMBER_LIMIT)
         {
-                *aOut_pClass  = Kern_SystemCalls_Class_Mach;
+                *aOut_pClass  = Kern_SystemCalls_kMach;
                 *aOut_pNumber = (uint32_t) -aRegister;
                 return (1);
         }
@@ -67,7 +67,7 @@ WriteResult(Arm64_Trap_tFrame*              aInOut_pFrame,
         /* EL0t with every interrupt open, and only the flags the process may hold. */
         uint64_t state = aInOut_pFrame->spsr & ARM64_USER_FLAGS;
 
-        if(aClass == Kern_SystemCalls_Class_Bsd)
+        if(aClass == Kern_SystemCalls_kBsd)
         {
                 state &= ~ARM64_USER_CARRY;
                 if(aIn_pResult->error != 0)
@@ -83,8 +83,8 @@ WriteResult(Arm64_Trap_tFrame*              aInOut_pFrame,
 void
 Arm64_User_SystemCall(Arm64_Trap_tFrame* aInOut_pFrame, uint32_t aImmediate)
 {
-        Kern_SystemCalls_tClass kind   = Kern_SystemCalls_Class_Bsd;
-        uint32_t                number = 0;
+        Kern_SystemCalls_tClass kind                                     = Kern_SystemCalls_kBsd;
+        uint32_t                number                                   = 0;
         const uint64_t          arguments[ KERN_SYSTEM_CALLS_ARGUMENTS ] = {
                 aInOut_pFrame->x[ 0 ], aInOut_pFrame->x[ 1 ], aInOut_pFrame->x[ 2 ],
                 aInOut_pFrame->x[ 3 ], aInOut_pFrame->x[ 4 ], aInOut_pFrame->x[ 5 ],
