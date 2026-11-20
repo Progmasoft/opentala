@@ -76,6 +76,25 @@ CheckSize(uint32_t aSize)
         return (IPC_MACH_MSG_SUCCESS);
 }
 
+static int
+Enqueue(Ipc_Message_tMessage* aIn_pMessage);
+
+/**
+ * @brief Checks what a header asks for that OpenTala does not take: descriptors and vouchers.
+ *
+ * @param[in] aIn_pHeader The header.
+ * @return MACH_MSG_SUCCESS, MACH_SEND_INVALID_TYPE or MACH_SEND_INVALID_VOUCHER.
+ */
+static int
+CheckHeader(const Ipc_Mach_tHeader* aIn_pHeader)
+{
+        if((aIn_pHeader->bits & IPC_MACH_BITS_COMPLEX) != 0U)
+                return (IPC_MACH_SEND_INVALID_TYPE);
+        if(IPC_MACH_BITS_VOUCHER(aIn_pHeader->bits) != 0U)
+                return (IPC_MACH_SEND_INVALID_VOUCHER);
+        return (IPC_MACH_MSG_SUCCESS);
+}
+
 int
 Ipc_Message_Send(Ipc_Space_tSpace* aInOut_pSpace, uint64_t aMessage, uint32_t aSize)
 {
@@ -95,25 +114,32 @@ Ipc_Message_Send(Ipc_Space_tSpace* aInOut_pSpace, uint64_t aMessage, uint32_t aS
         }
         const Ipc_Mach_tHeader* pHeader = (const Ipc_Mach_tHeader*) pMessage->bytes;
 
-        pMessage->size = aSize;
-        if((pHeader->bits & IPC_MACH_BITS_COMPLEX) != 0U)
-        {
-                Kern_Memory_Free(pMessage);
-                return (IPC_MACH_SEND_INVALID_TYPE);
-        }
-        if(IPC_MACH_BITS_VOUCHER(pHeader->bits) != 0U)
-        {
-                Kern_Memory_Free(pMessage);
-                return (IPC_MACH_SEND_INVALID_VOUCHER);
-        }
-        const int rights = CopyInRights(aInOut_pSpace, pHeader, pMessage);
+        pMessage->size     = aSize;
+        const int accepted = CheckHeader(pHeader);
+        const int rights   = accepted == IPC_MACH_MSG_SUCCESS
+                ? CopyInRights(aInOut_pSpace, pHeader, pMessage)
+                : accepted;
 
         if(rights != IPC_MACH_MSG_SUCCESS)
         {
                 Kern_Memory_Free(pMessage);
                 return (rights);
         }
-        Ipc_Port_tPort* pPort = pMessage->destination.pPort;
+        return (Enqueue(pMessage));
+}
+
+/**
+ * @brief Puts a message whose rights are taken at the end of its destination's queue. A dead port
+ * and a kernel port take no message, and nobody waits on a full queue; the message is destroyed then.
+ *
+ * @param[in] aIn_pMessage The message.
+ * @return MACH_MSG_SUCCESS, MACH_SEND_INVALID_DEST or MACH_SEND_TIMED_OUT.
+ */
+static int
+Enqueue(Ipc_Message_tMessage* aIn_pMessage)
+{
+        Ipc_Message_tMessage* pMessage = aIn_pMessage;
+        Ipc_Port_tPort*       pPort    = pMessage->destination.pPort;
 
         /* A dead port and a kernel port take no message; nobody waits on a full queue. */
         if(pPort->isDead || pPort->pReceiver == NULL || pPort->queued >= IPC_MACH_QUEUE_LIMIT)

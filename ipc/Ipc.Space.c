@@ -238,14 +238,12 @@ Ipc_Space_AllocateReceive(Ipc_Space_tSpace* aInOut_pSpace, Ipc_Mach_tName* aOut_
 static void
 MoveOut(Ipc_Space_tEntry* aInOut_pEntry, uint32_t aRight)
 {
-        Ipc_Port_tPort* pPort = aInOut_pEntry->pPort;
-
         aInOut_pEntry->rights &= ~aRight;
         aInOut_pEntry->urefs   = 0U;
         if(aInOut_pEntry->rights == 0U)
                 FreeEntry(aInOut_pEntry);
         else
-                pPort->references++;
+                aInOut_pEntry->pPort->references++;
 }
 
 /**
@@ -266,6 +264,46 @@ Needs(uint32_t aDisposition)
                 return (IPC_SPACE_SEND_ONCE);
         default:
                 return (IPC_SPACE_SEND);
+        }
+}
+
+/**
+ * @brief Makes the change a disposition makes to an entry and its port: a new right, or a right that
+ * moves out of the entry.
+ *
+ * @param[in,out] aInOut_pEntry The entry, which holds the right the disposition needs.
+ * @param[in]     aDisposition  MOVE_SEND, MOVE_SEND_ONCE, COPY_SEND, MAKE_SEND or MAKE_SEND_ONCE.
+ */
+static void
+Take(Ipc_Space_tEntry* aInOut_pEntry, uint32_t aDisposition)
+{
+        Ipc_Port_tPort* pPort = aInOut_pEntry->pPort;
+
+        switch(aDisposition)
+        {
+        case IPC_MACH_MOVE_SEND:
+                if(aInOut_pEntry->urefs > 1U)
+                {
+                        aInOut_pEntry->urefs--;
+                        pPort->sendRights++;
+                        pPort->references++;
+                } else
+                {
+                        MoveOut(aInOut_pEntry, IPC_SPACE_SEND);
+                }
+                break;
+        case IPC_MACH_MOVE_SEND_ONCE:
+                MoveOut(aInOut_pEntry, IPC_SPACE_SEND_ONCE);
+                break;
+        case IPC_MACH_MAKE_SEND_ONCE:
+                pPort->sendOnceRights++;
+                pPort->references++;
+                break;
+        default:
+                /* COPY_SEND and MAKE_SEND: a new send right. */
+                pPort->sendRights++;
+                pPort->references++;
+                break;
         }
 }
 
@@ -290,32 +328,7 @@ Ipc_Space_CopyIn(Ipc_Space_tSpace* aInOut_pSpace,
                         || aDisposition == IPC_MACH_MOVE_SEND_ONCE
                 ? IPC_MACH_PORT_SEND_ONCE
                 : IPC_MACH_PORT_SEND;
-        switch(aDisposition)
-        {
-        case IPC_MACH_MOVE_SEND:
-                if(pEntry->urefs > 1U)
-                {
-                        pEntry->urefs--;
-                        pPort->sendRights++;
-                        pPort->references++;
-                } else
-                {
-                        MoveOut(pEntry, IPC_SPACE_SEND);
-                }
-                break;
-        case IPC_MACH_MOVE_SEND_ONCE:
-                MoveOut(pEntry, IPC_SPACE_SEND_ONCE);
-                break;
-        case IPC_MACH_MAKE_SEND_ONCE:
-                pPort->sendOnceRights++;
-                pPort->references++;
-                break;
-        default:
-                /* COPY_SEND and MAKE_SEND: a new send right. */
-                pPort->sendRights++;
-                pPort->references++;
-                break;
-        }
+        Take(pEntry, aDisposition);
         return (IPC_MACH_KERN_SUCCESS);
 }
 
@@ -382,26 +395,47 @@ Ipc_Space_CopyOut(Ipc_Space_tSpace* aInOut_pSpace,
         return (IPC_MACH_KERN_SUCCESS);
 }
 
+/** What CanInsert() answers when a send right joins the entry of its name. */
+#define IPC_SPACE_MERGE (-1)
+
+/**
+ * @brief Whether a right can go into a space under a name: the name must be in the table, and name
+ * nothing or the right's port; a send right may join its port's name, and a port has one name for its
+ * send rights.
+ *
+ * @param[in] aIn_pSpace The space.
+ * @param[in] aName      The name.
+ * @param[in] aIn_Right  The right.
+ * @return IPC_MACH_KERN_SUCCESS for a free name, IPC_SPACE_MERGE when the send right joins the name's
+ * entry, or why it cannot.
+ */
+static int
+CanInsert(const Ipc_Space_tSpace* aIn_pSpace, Ipc_Mach_tName aName, Ipc_Port_tRight aIn_Right)
+{
+        const uint32_t          index  = IndexOf(aName);
+        const Ipc_Space_tEntry* pEntry = &aIn_pSpace->entries[ index ];
+        const bool              isSend = aIn_Right.type == IPC_MACH_PORT_SEND;
+
+        if(index == 0U)
+                return (IPC_MACH_KERN_INVALID_VALUE);
+        if(pEntry->rights == 0U)
+                return (isSend && IndexOfPort(aIn_pSpace, aIn_Right.pPort) != 0U
+                                ? IPC_MACH_KERN_RIGHT_EXISTS
+                                : IPC_MACH_KERN_SUCCESS);
+        if(NameOf(index, pEntry->generation) != aName || pEntry->pPort != aIn_Right.pPort)
+                return (IPC_MACH_KERN_NAME_EXISTS);
+        return (isSend ? IPC_SPACE_MERGE : IPC_MACH_KERN_RIGHT_EXISTS);
+}
+
 int
 Ipc_Space_Insert(Ipc_Space_tSpace* aInOut_pSpace, Ipc_Mach_tName aName, Ipc_Port_tRight aIn_Right)
 {
         const uint32_t    index  = IndexOf(aName);
         Ipc_Space_tEntry* pEntry = &aInOut_pSpace->entries[ index ];
-        int               result = IPC_MACH_KERN_SUCCESS;
+        const int         result = CanInsert(aInOut_pSpace, aName, aIn_Right);
 
-        if(index == 0U)
-                result = IPC_MACH_KERN_INVALID_VALUE;
-        else if(pEntry->rights != 0U && NameOf(index, pEntry->generation) != aName)
-                result = IPC_MACH_KERN_NAME_EXISTS;
-        else if(pEntry->rights != 0U && pEntry->pPort != aIn_Right.pPort)
-                result = IPC_MACH_KERN_NAME_EXISTS;
-        else if(pEntry->rights != 0U && aIn_Right.type == IPC_MACH_PORT_SEND)
+        if(result == IPC_SPACE_MERGE)
                 return (MergeSend(pEntry, aIn_Right));
-        else if(pEntry->rights != 0U)
-                result = IPC_MACH_KERN_RIGHT_EXISTS;
-        else if(aIn_Right.type == IPC_MACH_PORT_SEND
-                && IndexOfPort(aInOut_pSpace, aIn_Right.pPort) != 0U)
-                result = IPC_MACH_KERN_RIGHT_EXISTS;
         if(result != IPC_MACH_KERN_SUCCESS)
         {
                 Ipc_Port_ReleaseRight(aIn_Right);
@@ -467,6 +501,29 @@ ChangeUrefs(Ipc_Space_tEntry* aInOut_pEntry, uint32_t aRight, int32_t aDelta)
         return (IPC_MACH_KERN_SUCCESS);
 }
 
+/**
+ * @brief Changes a right that has no user references, a receive or a send-once right: 0 changes
+ * nothing, -1 destroys it, any other change is refused.
+ *
+ * @param[in,out] aInOut_pEntry The entry.
+ * @param[in]     aRight        IPC_SPACE_RECEIVE or IPC_SPACE_SEND_ONCE.
+ * @param[in]     aDelta        The change.
+ * @return IPC_MACH_KERN_SUCCESS, IPC_MACH_KERN_INVALID_RIGHT or IPC_MACH_KERN_INVALID_VALUE.
+ */
+static int
+ChangeSingle(Ipc_Space_tEntry* aInOut_pEntry, uint32_t aRight, int32_t aDelta)
+{
+        if((aInOut_pEntry->rights & aRight) == 0U)
+                return (IPC_MACH_KERN_INVALID_RIGHT);
+        if(aDelta != 0 && aDelta != -1)
+                return (IPC_MACH_KERN_INVALID_VALUE);
+        if(aDelta == -1 && aRight == IPC_SPACE_RECEIVE)
+                DestroyReceive(aInOut_pEntry);
+        else if(aDelta == -1)
+                DropRight(aInOut_pEntry, IPC_SPACE_SEND_ONCE);
+        return (IPC_MACH_KERN_SUCCESS);
+}
+
 int
 Ipc_Space_ModRefs(Ipc_Space_tSpace* aInOut_pSpace,
                   Ipc_Mach_tName    aName,
@@ -480,19 +537,9 @@ Ipc_Space_ModRefs(Ipc_Space_tSpace* aInOut_pSpace,
         switch(aRight)
         {
         case IPC_MACH_RIGHT_RECEIVE:
-                if((pEntry->rights & IPC_SPACE_RECEIVE) == 0U)
-                        return (IPC_MACH_KERN_INVALID_RIGHT);
-                if(aDelta == -1)
-                        DestroyReceive(pEntry);
-                return (aDelta == 0 || aDelta == -1 ? IPC_MACH_KERN_SUCCESS
-                                                    : IPC_MACH_KERN_INVALID_VALUE);
+                return (ChangeSingle(pEntry, IPC_SPACE_RECEIVE, aDelta));
         case IPC_MACH_RIGHT_SEND_ONCE:
-                if((pEntry->rights & IPC_SPACE_SEND_ONCE) == 0U)
-                        return (IPC_MACH_KERN_INVALID_RIGHT);
-                if(aDelta == -1)
-                        DropRight(pEntry, IPC_SPACE_SEND_ONCE);
-                return (aDelta == 0 || aDelta == -1 ? IPC_MACH_KERN_SUCCESS
-                                                    : IPC_MACH_KERN_INVALID_VALUE);
+                return (ChangeSingle(pEntry, IPC_SPACE_SEND_ONCE, aDelta));
         case IPC_MACH_RIGHT_SEND:
                 return ((pEntry->rights & IPC_SPACE_SEND) == 0U
                                 ? IPC_MACH_KERN_INVALID_RIGHT
