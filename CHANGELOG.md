@@ -7,6 +7,10 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+## 0.1.0 - 2026-11-20
+
+The first release.
+
 - Mach IPC (`ipc/`): ports, a task's space of names with receive, send, send-once rights and dead names, and
   `mach_msg` with a header, a body of up to 2048 bytes, a destination and a reply right, and the trailer; the traps
   `_kernelrpc_mach_port_allocate`, `_deallocate`, `_mod_refs` and `_insert_right`, `mach_reply_port`,
